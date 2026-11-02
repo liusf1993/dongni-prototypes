@@ -246,7 +246,7 @@ pre{background:var(--bg);border-radius:8px;padding:12px;overflow-x:auto;font-siz
       <tr><td>已审核 (1)</td><td>老师确认 AI 分数无误</td><td>上述确认操作；改分后又改回 AI 原分</td><td>点状态签撤回为待审；撤销；AI 重批且分数变化</td></tr>
       <tr><td>已修正 (2)</td><td>老师改过分数，必然已审</td><td>任何老师改分（卡片步进、逐份审核、批量打分）</td><td>只能通过再次改分改变；AI 重批不覆盖</td></tr>
     </table></div>
-    <p class="muted">不在审核范围：AI 未出分的卷子、已退回人工批改的卷子。这两类本来就由老师给分，不计入进度分母。</p>
+    <p class="muted">不在审核范围：AI 未出分（finallyScore = -1）、已退回人工的项（intelligence_status = 5）。这两类本来就由人工给分，不计入进度分母。</p>
   </div>
 
   <div>
@@ -267,7 +267,7 @@ pre{background:var(--bg);border-radius:8px;padding:12px;overflow-x:auto;font-siz
     <h3>5. 不需要审核的场景</h3>
     <ul>
       <li><b>审核不卡任何流程</b>：不阻断阅卷完成、出成绩、发布报告。它是老师的工作进度工具，不是质量门禁。</li>
-      <li><b>按题开关“本题需要审核”</b>（按阅卷任务设置）：关闭后不显示待审计数、底部条和题号下的进度，页面与现在几乎一致；改分仍记为已修正，以后再打开审核时数据连续。</li>
+      <li><b>按题开关“本题需要审核”</b>（阅卷任务级，存 paper_read 维度）：关闭后不显示待审计数、底部条和题号下的进度，页面与现在几乎一致；改分仍记为已修正，以后再打开审核时数据连续。</li>
       <li><b>默认值</b>：考试默认开启；作业/练习默认关闭（老师可打开）。避免给低利害场景增加视觉负担和“没审完”的心理负担。</li>
       <li><b>不做“滚动看过即视为已审”</b>：隐式规则不可靠，老师也无法分辨哪些是自己真确认过的。显式的“确认本页”只多 1 次点击，状态可信。</li>
       <li><b>高置信自动免审暂不做</b>：置信度目前未在列表接口全部回填，且一旦误放行责任不清。等有审核数据后，可评估“高置信组抽检 N 份后整组放行”。</li>
@@ -275,25 +275,32 @@ pre{background:var(--bg);border-radius:8px;padding:12px;overflow-x:auto;font-siz
   </div>
 
   <div>
-    <h3>6. 后端要点</h3>
+    <h3>6. 后端方案（marking 为主，fat-service 承载迁移）</h3>
+    <p><b>存储</b>：在 <code>exam.t_exam_item_intelligence</code> 增加审核字段（每个 examItem × paperRead 一行，正好是审核粒度；列表查询本来就扫这张表，筛选不需要额外 JOIN）。</p>
+<pre>ALTER TABLE t_exam_item_intelligence
+  ADD COLUMN review_status TINYINT NOT NULL DEFAULT 0 COMMENT '审核状态 0待审核 1已审核 2已修正',
+  ADD COLUMN reviewer_id BIGINT NOT NULL DEFAULT 0 COMMENT '审核人ID',
+  ADD COLUMN reviewer_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '审核人',
+  ADD COLUMN review_date_time DATETIME NULL COMMENT '审核时间';
+-- 是否需要 (paper_read_id, review_status) 索引，按现有 V20260416.002 索引和 explain 决定</pre>
+    <p class="muted">迁移放 fat-service <code>db/migration/exam/2026/</code>，命名 <code>V20261103.1.506__add_intelligence_review_status.sql</code>（实施当天日期）。需评估表量级与 MySQL 5.7 加列锁表时间；TiDB 为在线 DDL。旧版本服务不读不写新列，可先发迁移再发代码。</p>
+    <p><b>接口</b>（考试 <code>/exam/intelligence/*</code> 与作业 <code>/exam/studyGuideIntelli/*</code> 两套都要加）：</p>
     <ul>
-      <li><b>存储</b>：每份卷子的智能批改结果上增加审核状态、审核人、审核时间。旧版本服务不读写新字段，可以先发数据变更再发代码。</li>
-      <li><b>按卷子确认</b>：前端传卷子 ID 列表，“确认本页”也传本页 ID，避免刷新后页内容变化导致确认到没看过的卷子。只处理已出分、未修正的卷子；重复提交结果不变。</li>
-      <li><b>整组确认</b>：前端带上看到的待审数，服务端统计不一致就拒绝并返回最新数量，防止期间新批改出来的卷子被一并放行。</li>
-      <li><b>撤销</b>：前端记住本次操作的卷子和原状态，回写为待审核。</li>
-      <li><b>列表与分组</b>：支持按审核状态筛选，分组和题号返回待审数。</li>
-      <li><b>改分</b>：老师改分时在同一事务里记为已修正；AI 重新批改只在分数变化且状态为已审核时重置为待审核。</li>
-      <li><b>考试与作业</b>两套入口都要支持。</li>
+      <li><code>POST …/review</code> <code>{paperReadId, examItemIds[], reviewStatus: 0|1}</code>：按 ID 设置。只更新属于该 paperRead、finallyScore ≥ 0、review_status ≠ 2 的行；幂等；返回实际更新数。“确认本页”也传本页 ID，避免刷新后页内容变化导致确认到没看过的卷子。</li>
+      <li><code>POST …/reviewGroup</code> <code>{paperReadId, readScore | ocrText, expectedCount}</code>：整组确认。服务端统计该组待审数，与 expectedCount 不一致则拒绝并返回最新数量（防止期间新批改出来的卷子被一并放行）。</li>
+      <li>撤销：前端记住本次操作的 ID 与原状态，调用 review 回写为 0。</li>
+      <li><code>listAiDetail</code> 增加 <code>reviewStatus</code> 筛选参数，返回 <code>reviewStatus / reviewerName / reviewDateTime / aiScore</code>；<code>listAiResult</code> 分组结果增加 <code>pendingCount</code>；题号列表接口增加每题待审数。</li>
+      <li>老师改分（<code>submitItems</code> 老师身份、批量打分）在同一事务内把 review_status 置 2；AI 重新批改仅在分数变化且状态为 1 时重置为 0。</li>
     </ul>
-    <p><b>多人协作</b>：状态挂在卷子上而不是老师上，谁确认都算；卡片悬停显示审核人和时间。并发确认同一批没有副作用。</p>
+    <p><b>多人协作</b>：状态挂在卷子上而不是老师上，谁确认都算；卡片悬停显示审核人和时间。并发确认同一批是幂等的。</p>
   </div>
 
   <div>
     <h3>7. 需要先核实的点</h3>
     <ul>
-      <li>AI 重新批改是否会覆盖老师改过的分数。如果会，“已修正”也要按规则重置并提示。</li>
-      <li>低置信度标记目前并非所有列表都返回，风险优先排序在部分场景实际不生效。</li>
-      <li>“修正”的口径需要 AI 原始分作对比，确认原始分是否单独保存（否则需在首次改分时记录）。</li>
+      <li>AI 重新批改（<code>reCorrectManualIntelligence</code> 等）是否会覆盖老师改过的分数。如果会，“已修正”也要按规则重置并提示。</li>
+      <li>考试列表 <code>listAiDetail</code> 当前不回填 <code>lowConfidence</code>（只有另一条路径回填），风险排序在考试场景实际不生效。</li>
+      <li>“修正”的口径：分数改动以 <code>finallyScore</code> 与 AI 原始分比较，需要确认 AI 原始分是否有独立字段保存（否则需在首次改分时记录）。</li>
       <li>作文、多空填空等题型的卡片布局不同，底部条和状态签位置需要在各题型下验收。</li>
     </ul>
   </div>

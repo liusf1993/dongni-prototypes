@@ -1,0 +1,629 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>智能批改审核原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&display=swap">
+<style>
+/* 布局：沿用懂你智能批改页（青绿页头 + 左侧分数分组 + 右侧卡片网格），新增审核进度条、卡片状态签、底部操作条 */
+:root{
+  --bg:#f2f5f4; --surface:#ffffff; --paper:#fcfcfa; --line:#dfe6e4; --line-strong:#c5d1ce;
+  --fg:#1d2b29; --muted:#6a7a77; --brand:#16867a; --brand-2:#1fa58f; --brand-soft:#e3f3f0;
+  --ok:#1f9d55; --ok-soft:#e4f5ea; --warn:#c96a12; --warn-soft:#fdf0e1; --risk:#c2410c; --risk-soft:#fde9df;
+  --ink:#1b2a6b; --print:#3a3a3a; --shadow:0 1px 2px rgba(20,50,45,.06),0 4px 14px rgba(20,50,45,.06);
+  --hand:"Caveat","Segoe Print","Comic Sans MS",cursive;
+  --ui:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1716; --surface:#16211f; --paper:#e9ebe6; --line:#26332f; --line-strong:#344641;
+  --fg:#e3ece9; --muted:#93a4a0; --brand:#3cc2ad; --brand-2:#2aa893; --brand-soft:#173430;
+  --ok:#4ccf83; --ok-soft:#163323; --warn:#f0a050; --warn-soft:#3a2a17; --risk:#ff8a5c; --risk-soft:#3d2219;
+  --ink:#1b2a6b; --print:#3a3a3a; --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1716; --surface:#16211f; --paper:#e9ebe6; --line:#26332f; --line-strong:#344641;
+  --fg:#e3ece9; --muted:#93a4a0; --brand:#3cc2ad; --brand-2:#2aa893; --brand-soft:#173430;
+  --ok:#4ccf83; --ok-soft:#163323; --warn:#f0a050; --warn-soft:#3a2a17; --risk:#ff8a5c; --risk-soft:#3d2219;
+  --ink:#1b2a6b; --print:#3a3a3a; --shadow:0 1px 2px rgba(0,0,0,.3); color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--ui);font-size:14px;line-height:1.5}
+.wrap{max-width:1280px;margin:0 auto;padding-block:16px 96px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:16px}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,.card:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--line)}
+.tabs button{border:0;background:none;padding:8px 14px;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px}
+.tabs button[aria-selected="true"]{color:var(--brand);border-color:var(--brand);font-weight:600}
+
+/* 页头 */
+.hero{background:linear-gradient(100deg,#13675f,#1b8f80);color:#fff;border-radius:12px 12px 0 0;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hero h1{margin:0;font-size:22px;letter-spacing:.04em}
+.hero .sw{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.14);padding:6px 10px;border-radius:8px;font-size:13px}
+.toggle{width:38px;height:22px;border-radius:11px;border:0;background:rgba(255,255,255,.35);position:relative;padding:0}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle[aria-checked="true"]{background:#7be0c9}
+.toggle[aria-checked="true"]::after{left:19px}
+.qbar{background:var(--surface);border-radius:0 0 12px 12px;padding:14px 24px;display:flex;gap:18px;align-items:center;flex-wrap:wrap;box-shadow:var(--shadow)}
+.qbar b{font-size:15px}
+.qn{display:flex;gap:6px;align-items:center;color:var(--muted)}
+.qn button{border:0;background:none;padding:6px 12px;border-radius:6px;font-size:15px;color:var(--fg);display:flex;flex-direction:column;align-items:center;line-height:1.2}
+.qn button small{font-size:10px;color:var(--muted)}
+.qn button[aria-pressed="true"]{background:var(--brand-soft);color:var(--brand);font-weight:600}
+
+/* 主面板 */
+.panel{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:16px 20px;display:flex;flex-direction:column;gap:14px}
+.ph{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:space-between}
+.prog{display:flex;align-items:center;gap:12px;flex-wrap:wrap;min-width:0}
+.prog .lbl{font-weight:600;color:var(--brand)}
+.bar{width:220px;max-width:40vw;height:8px;border-radius:4px;background:var(--line);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bar .r{background:var(--ok)} .bar .c{background:var(--warn)}
+.prog .num{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.prog .num strong{color:var(--fg)}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--surface);padding:6px 12px;font-size:13px;font-variant-numeric:tabular-nums}
+.seg button+button{border-left:1px solid var(--line-strong)}
+.seg button[aria-pressed="true"]{background:var(--brand);color:#fff}
+.btn{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;padding:7px 14px;font-size:13px}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+.btn.ghost{border-color:transparent;background:none;color:var(--brand)}
+.banner{background:var(--brand-soft);color:var(--fg);border-radius:8px;padding:8px 12px;font-size:13px}
+.body{display:grid;grid-template-columns:200px minmax(0,1fr);gap:20px}
+@media (max-width:760px){.body{grid-template-columns:1fr}}
+
+/* 分数分组 */
+.groups{display:flex;flex-direction:column;gap:4px}
+@media (max-width:760px){.groups{flex-direction:row;overflow-x:auto;padding-bottom:4px}}
+.g{position:relative;display:grid;grid-template-columns:1fr auto 22px;align-items:center;gap:6px;padding:10px 8px 10px 14px;border-radius:8px;border:0;background:none;text-align:left;min-width:150px}
+.g[aria-pressed="true"]{background:var(--brand-soft);box-shadow:inset 3px 0 0 var(--brand)}
+.g .s{font-size:17px;font-variant-numeric:tabular-nums}
+.g .cnt{font-size:12px;background:var(--brand-2);color:#fff;border-radius:10px;padding:1px 8px;font-variant-numeric:tabular-nums}
+.g .sub{grid-column:1/-1;font-size:11px;color:var(--muted);display:flex;align-items:center;gap:6px}
+.g .sub .mini{flex:1;height:3px;background:var(--line);border-radius:2px;overflow:hidden}
+.g .sub .mini i{display:block;height:100%;background:var(--ok)}
+.g .done{color:var(--ok)}
+.g .more{border:0;background:none;width:22px;height:22px;border-radius:4px;color:var(--muted);font-size:16px;line-height:1}
+.g .more:hover{background:var(--line)}
+.menu{position:absolute;z-index:20;left:100%;top:4px;margin-left:6px;width:260px;background:var(--surface);border:1px solid var(--line-strong);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:12px;display:flex;flex-direction:column;gap:10px;font-size:13px;text-align:left}
+@media (max-width:760px){.menu{left:0;top:100%;margin:6px 0 0}}
+.menu p{margin:0;color:var(--muted)}
+.menu .row{display:flex;gap:8px;justify-content:flex-end}
+
+/* 卡片 */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:16px;align-content:start}
+.card{position:relative;border:1px solid var(--line);border-radius:10px;background:var(--surface);padding:10px;display:flex;flex-direction:column;gap:10px;transition:border-color .15s,box-shadow .15s,opacity .2s}
+.card.sel{border-color:var(--brand);box-shadow:0 0 0 2px var(--brand-soft)}
+.card.st-reviewed{border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+.card.st-corrected{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.card.leaving{opacity:.25}
+.sheet{background:var(--paper);border:1px solid #9aa;border-radius:2px;padding:6px 8px 4px;color:var(--print);font-size:10.5px;line-height:1.85;cursor:pointer;user-select:none;min-height:104px;overflow:hidden}
+.sheet .hd{font-size:9px;color:#777}
+.sheet .ln{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.sheet .h{font-family:var(--hand);font-size:17px;color:var(--ink);display:inline-block;min-width:11px;text-align:center;border-bottom:1px solid #777;line-height:1;margin:0 1px;transform:rotate(var(--rot,0deg))}
+.tags{position:absolute;top:14px;left:14px;display:flex;gap:4px;pointer-events:none}
+.pill{pointer-events:auto;border:1px solid var(--line-strong);background:var(--surface);border-radius:12px;padding:1px 9px;font-size:12px;line-height:20px;display:inline-flex;align-items:center;gap:4px}
+.pill.pending{color:var(--muted)}
+.pill.pending:hover{border-color:var(--ok);color:var(--ok)}
+.pill.reviewed{background:var(--ok);border-color:var(--ok);color:#fff}
+.pill.corrected{background:var(--warn);border-color:var(--warn);color:#fff;cursor:default}
+.pill.low{background:var(--risk-soft);border-color:transparent;color:var(--risk);cursor:default}
+.chk{position:absolute;top:12px;right:14px;width:20px;height:20px;border-radius:5px;border:1.5px solid var(--line-strong);background:var(--surface);display:grid;place-items:center;font-size:13px;color:#fff;opacity:0;transition:opacity .1s}
+.card:hover .chk,.card.sel .chk,.selecting .chk{opacity:1}
+.card.sel .chk{background:var(--brand);border-color:var(--brand)}
+.foot{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.name{background:var(--brand-soft);color:var(--brand);font-weight:600;border-radius:6px;padding:3px 10px;white-space:nowrap}
+.step{display:flex;align-items:center;border:1px solid var(--line-strong);border-radius:8px;overflow:hidden}
+.step button{border:0;background:none;width:28px;height:30px;font-size:16px;color:var(--muted)}
+.step button:hover{background:var(--line)}
+.step span{min-width:52px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums}
+.step span small{font-weight:400;font-size:12px}
+.delta{font-size:12px;color:var(--warn);font-variant-numeric:tabular-nums}
+.empty{grid-column:1/-1;text-align:center;padding:48px 12px;color:var(--muted);display:flex;flex-direction:column;gap:8px;align-items:center}
+.empty strong{color:var(--ok);font-size:18px}
+.pager{display:flex;gap:6px;justify-content:center;align-items:center;font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px;flex-wrap:wrap}
+.pager button{border:1px solid var(--line);background:var(--surface);border-radius:6px;min-width:30px;height:28px}
+.pager button[aria-current="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+
+/* 底部操作条 */
+.dock{position:fixed;left:0;right:0;bottom:0;z-index:30;padding-bottom:env(safe-area-inset-bottom,0px);padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));background:color-mix(in srgb,var(--surface) 94%,transparent);backdrop-filter:blur(6px);border-top:1px solid var(--line)}
+.dock .in{max-width:1280px;margin:0 auto;padding-block:10px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.dock .stat{font-size:13px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dock .stat b{color:var(--fg)}
+.dock .acts{display:flex;gap:8px;flex-wrap:wrap}
+kbd{font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid currentColor;border-radius:4px;padding:0 4px;opacity:.75;margin-left:6px}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));z-index:40;background:#1d2b29;color:#fff;border-radius:10px;padding:10px 14px;display:flex;gap:14px;align-items:center;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.25);max-width:calc(100vw - 32px)}
+.toast button{border:0;background:none;color:#7be0c9;font-weight:600}
+
+/* 逐份审核 */
+.focus{position:fixed;inset:0;z-index:50;background:rgba(10,20,18,.62);display:grid;place-items:center;padding:16px}
+.fbox{background:var(--surface);border-radius:14px;width:min(760px,100%);max-height:100%;overflow:auto;padding:18px 20px;display:flex;flex-direction:column;gap:14px}
+.fbox .top{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.fbox .sheet{font-size:15px;line-height:2;cursor:default;padding:12px 16px}
+.fbox .sheet .h{font-size:26px;min-width:16px}
+.quick{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.quick button{border:1px solid var(--line-strong);background:var(--surface);border-radius:8px;min-width:44px;height:36px;font-variant-numeric:tabular-nums;font-weight:600}
+.quick button[aria-pressed="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+.ai{font-size:13px;color:var(--muted);background:var(--bg);border-radius:8px;padding:8px 12px}
+.ai b{color:var(--fg)}
+
+/* 设计说明 */
+.doc{background:var(--surface);border-radius:12px;box-shadow:var(--shadow);padding:24px clamp(16px,4vw,40px);display:flex;flex-direction:column;gap:22px}
+.doc h2{margin:0;font-size:20px;text-wrap:balance}
+.doc h3{margin:0 0 8px;font-size:16px;color:var(--brand)}
+.doc p,.doc li{max-width:72ch;color:var(--fg)}
+.doc p{margin:0 0 8px}
+.doc ul,.doc ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.doc .muted{color:var(--muted)}
+.tbl{overflow-x:auto}
+.tbl table{border-collapse:collapse;min-width:560px;width:100%;font-size:13px}
+.tbl th,.tbl td{border:1px solid var(--line);padding:7px 10px;text-align:left;vertical-align:top}
+.tbl th{background:var(--bg);font-weight:600}
+code{font-family:ui-monospace,Menlo,monospace;font-size:12px;background:var(--bg);padding:1px 5px;border-radius:4px}
+pre{background:var(--bg);border-radius:8px;padding:12px;overflow-x:auto;font-size:12px;margin:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <div class="tabs" role="tablist">
+    <button role="tab" id="tab-proto" aria-selected="true">交互原型</button>
+    <button role="tab" id="tab-doc" aria-selected="false">设计说明</button>
+  </div>
+
+  <section id="view-proto">
+    <div class="hero">
+      <h1>智能批改</h1>
+      <div class="sw" title="关闭后不显示待审核计数与操作条；修改分数仍记为“已修正”">
+        <span>本题需要审核</span>
+        <button class="toggle" id="reviewToggle" role="switch" aria-checked="true" aria-label="本题需要审核"></button>
+      </div>
+    </div>
+    <div class="qbar">
+      <b>题号</b>
+      <div class="qn"><span>解答题：</span><span id="qnList"></span></div>
+      <span class="muted" style="font-size:12px;color:var(--muted)">题号下方为该题审核进度，便于跨题追踪</span>
+    </div>
+  </section>
+
+  <section class="panel" id="panel">
+    <div class="ph">
+      <div class="prog" id="prog"></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="seg" id="filterSeg" role="group" aria-label="审核筛选"></div>
+        <button class="btn" id="focusBtn">逐份审核</button>
+      </div>
+    </div>
+    <div class="banner" id="offBanner" hidden>本题已设为不需要审核：不显示待审计数，也不会出现在“待审核”提醒中。老师修改过分数的卡片仍标为“已修正”。</div>
+    <div class="body">
+      <div class="groups" id="groups"></div>
+      <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+        <div class="grid" id="grid"></div>
+        <div class="pager" id="pager"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc" id="view-doc" hidden></section>
+</div>
+
+<div class="dock" id="dock"><div class="in">
+  <div class="stat" id="dockStat"></div>
+  <div class="acts" id="dockActs"></div>
+</div></div>
+<div class="toast" id="toast" hidden></div>
+<div class="focus" id="focus" hidden></div>
+
+<template id="docTpl">
+  <h2>智能批改审核：基本设计</h2>
+  <p class="muted">原型数据为模拟数据，学生姓名随机生成：第 13 题（配平题，4 小问各 4 分，满分 16），72 名学生，其中少量 AI 判分有误。每页 12 份，便于演示翻页。</p>
+
+  <div>
+    <h3>1. 老师实际怎么审</h3>
+    <ol>
+      <li><b>扫页找错（最主要）</b>：一页 8–20 张卡片快速扫过，只在发现判错时动手改分，其余默认认可。真正的成本在“看”，不在“点”。</li>
+      <li><b>重点件细看</b>：低置信、分数在中间段、作文/长解答，需要放大逐份看。</li>
+      <li><b>整组放行</b>：满分组、OCR 答案完全一致的组，抽几份没问题就整组放行。</li>
+      <li><b>分次、多人完成</b>：课间审一点、明天接着审；同一题可能由备课组几位老师分担。这正是“忘了审到哪”的根源。</li>
+    </ol>
+  </div>
+
+  <div>
+    <h3>2. 核心思路：把审核做成“清空待办”</h3>
+    <ul>
+      <li>默认视图是<b>待审核</b>。确认一页，这页的卡片离开视图，下一批自动补上；剩余数清零就是审完。老师不需要记住页码。</li>
+      <li><b>只处理例外</b>：看到判错的直接改分，改分即视为已审（已修正）；其余的用一次“确认本页其余 N 份”放行。一页的成本 = 改错的几张 + 1 次点击。</li>
+      <li><b>风险优先</b>：页内按低置信在前排序（现有逻辑），分组上显示每组的待审数，老师自然先去有风险的地方。</li>
+      <li><b>任何批量操作都可撤销</b>（底部提示条 8 秒内“撤销”），因此批量按钮不需要二次确认弹窗；只有整组确认（可能几百份）用一个轻量内联确认。</li>
+    </ul>
+  </div>
+
+  <div>
+    <h3>3. 状态模型</h3>
+    <div class="tbl"><table>
+      <tr><th>状态</th><th>含义</th><th>如何进入</th><th>如何离开</th></tr>
+      <tr><td>待审核 (0)</td><td>AI 已给分，老师未确认</td><td>智能批改出分；AI 重新批改导致分数变化</td><td>单张确认 / 选中确认 / 确认本页 / 整组确认 / 改分</td></tr>
+      <tr><td>已审核 (1)</td><td>老师确认 AI 分数无误</td><td>上述确认操作；改分后又改回 AI 原分</td><td>点状态签撤回为待审；撤销；AI 重批且分数变化</td></tr>
+      <tr><td>已修正 (2)</td><td>老师改过分数，必然已审</td><td>任何老师改分（卡片步进、逐份审核、批量打分）</td><td>只能通过再次改分改变；AI 重批不覆盖</td></tr>
+    </table></div>
+    <p class="muted">不在审核范围：AI 未出分的卷子、已退回人工批改的卷子。这两类本来就由老师给分，不计入进度分母。</p>
+  </div>
+
+  <div>
+    <h3>4. 场景与操作成本</h3>
+    <div class="tbl"><table>
+      <tr><th>场景</th><th>操作</th><th>成本</th></tr>
+      <tr><td>一页都对</td><td>底部“确认本页 N 份”，或按 Enter</td><td>1 次</td></tr>
+      <tr><td>一页有 2 张错</td><td>改这 2 张的分（自动已修正）→ 确认本页其余</td><td>改分 + 1 次</td></tr>
+      <tr><td>只认可其中几张</td><td>勾选卡片（Shift 连选）→ 标记已审核</td><td>勾选 + 1 次</td></tr>
+      <tr><td>单张</td><td>点卡片左上角“待审”签</td><td>1 次</td></tr>
+      <tr><td>满分组/一致答案组</td><td>分组 ⋯ → 确认本组全部待审</td><td>2 次</td></tr>
+      <tr><td>可疑件细看</td><td>逐份审核：大图 + 快捷分值，Enter 通过并下一份，← → 翻看</td><td>每份 1 键</td></tr>
+      <tr><td>接着昨天继续</td><td>打开页面即是待审核视图，题号下有每题剩余数</td><td>0</td></tr>
+    </table></div>
+  </div>
+
+  <div>
+    <h3>5. 不需要审核的场景</h3>
+    <ul>
+      <li><b>审核不卡任何流程</b>：不阻断阅卷完成、出成绩、发布报告。它是老师的工作进度工具，不是质量门禁。</li>
+      <li><b>按题开关“本题需要审核”</b>（按阅卷任务设置）：关闭后不显示待审计数、底部条和题号下的进度，页面与现在几乎一致；改分仍记为已修正，以后再打开审核时数据连续。</li>
+      <li><b>默认值</b>：考试默认开启；作业/练习默认关闭（老师可打开）。避免给低利害场景增加视觉负担和“没审完”的心理负担。</li>
+      <li><b>不做“滚动看过即视为已审”</b>：隐式规则不可靠，老师也无法分辨哪些是自己真确认过的。显式的“确认本页”只多 1 次点击，状态可信。</li>
+      <li><b>高置信自动免审暂不做</b>：置信度目前未在列表接口全部回填，且一旦误放行责任不清。等有审核数据后，可评估“高置信组抽检 N 份后整组放行”。</li>
+    </ul>
+  </div>
+
+  <div>
+    <h3>6. 后端要点</h3>
+    <ul>
+      <li><b>存储</b>：每份卷子的智能批改结果上增加审核状态、审核人、审核时间。旧版本服务不读写新字段，可以先发数据变更再发代码。</li>
+      <li><b>按卷子确认</b>：前端传卷子 ID 列表，“确认本页”也传本页 ID，避免刷新后页内容变化导致确认到没看过的卷子。只处理已出分、未修正的卷子；重复提交结果不变。</li>
+      <li><b>整组确认</b>：前端带上看到的待审数，服务端统计不一致就拒绝并返回最新数量，防止期间新批改出来的卷子被一并放行。</li>
+      <li><b>撤销</b>：前端记住本次操作的卷子和原状态，回写为待审核。</li>
+      <li><b>列表与分组</b>：支持按审核状态筛选，分组和题号返回待审数。</li>
+      <li><b>改分</b>：老师改分时在同一事务里记为已修正；AI 重新批改只在分数变化且状态为已审核时重置为待审核。</li>
+      <li><b>考试与作业</b>两套入口都要支持。</li>
+    </ul>
+    <p><b>多人协作</b>：状态挂在卷子上而不是老师上，谁确认都算；卡片悬停显示审核人和时间。并发确认同一批没有副作用。</p>
+  </div>
+
+  <div>
+    <h3>7. 需要先核实的点</h3>
+    <ul>
+      <li>AI 重新批改是否会覆盖老师改过的分数。如果会，“已修正”也要按规则重置并提示。</li>
+      <li>低置信度标记目前并非所有列表都返回，风险优先排序在部分场景实际不生效。</li>
+      <li>“修正”的口径需要 AI 原始分作对比，确认原始分是否单独保存（否则需在首次改分时记录）。</li>
+      <li>作文、多空填空等题型的卡片布局不同，底部条和状态签位置需要在各题型下验收。</li>
+    </ul>
+  </div>
+
+  <div>
+    <h3>8. 分期</h3>
+    <ol>
+      <li><b>P1</b>：状态字段 + 单张/选中/本页/整组确认 + 改分自动已修正 + 待审筛选 + 进度条 + 撤销 + “本题需要审核”开关。</li>
+      <li><b>P2</b>：逐份审核键盘模式；OCR 一致答案组整组确认；进度总览中展示审核进度。</li>
+      <li><b>P3</b>：基于审核数据评估 AI 准确率，探索高置信抽检放行。</li>
+    </ol>
+  </div>
+</template>
+
+<script>
+(function(){
+  "use strict";
+  // ---------- 模拟数据 ----------
+  var seed = 20261103;
+  function rnd(){ seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }
+  var LINES = [
+    {t:["","Cu + ","HNO₃(稀) = ","Cu(NO₃)₂ + ","NO↑ + ","H₂O"], k:[3,8,3,2,4]},
+    {t:["","KMnO₄ + ","KI + ","H₂O = ","KOH + ","MnO₂ + ","I₂"], k:[2,6,4,8,2,3]},
+    {t:["","Cl₂ + ","OH⁻ =△= ","Cl⁻ + ","ClO₃⁻ + ","H₂O"], k:[3,6,5,1,3]},
+    {t:["","Cr₂O₇²⁻ + ","Fe²⁺ + ","H⁺ = ","Cr³⁺ + ","Fe³⁺ + ","H₂O"], k:[1,6,14,2,6,7]}
+  ];
+  var SUR = "王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾萧田董潘袁蔡蒋余于杜叶程魏苏吕丁任沈姚卢姜崔钟谭陆汪范金石廖贾夏韦付方白邹孟熊秦邱江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵万钱严覃武戴莫孔向汤";
+  var GIV = ["子涵","若曦","思远","雨桐","铭妍","志刚","梓轩","欣怡","浩然","嘉怡","一诺","佳琪","宇航","雨萱","俊熙","诗涵","子墨","晨阳","雅琪","明哲","可欣","天佑","梦瑶","博文","语嫣","泽宇","心怡","皓轩","思琪","建国","若彤","鹏飞","乐瑶","文博","芷若","睿","珍","玮","彤","磊"];
+  function makeStudents(n, qn){
+    var arr = [];
+    for (var i = 0; i < n; i++) {
+      var name = SUR[Math.floor(rnd()*SUR.length)] + GIV[Math.floor(rnd()*GIV.length)];
+      var right = 0, ans = LINES.map(function(L){
+        var wrong = rnd() < 0.16;
+        var vals = L.k.map(function(v){ return v; });
+        if (wrong) { var j = Math.floor(rnd()*vals.length); vals[j] = vals[j] + (rnd() < .5 ? 1 : 2); }
+        if (!wrong) right++;
+        return vals;
+      });
+      var truth = right * 4, ai = truth, conf = 0.82 + rnd()*0.17;
+      // 约 10% AI 判分有误：漏判一处错误或把对的判错
+      if (rnd() < 0.10) { ai = truth === 16 ? 12 : Math.min(16, truth + 4); conf = 0.45 + rnd()*0.3; }
+      else if (rnd() < 0.06) { conf = 0.5 + rnd()*0.2; }
+      arr.push({id: qn*1000 + i, name: name, ans: ans, truth: truth, ai: ai, score: ai, group: ai, conf: conf, low: conf < 0.75, st: "pending", rot: (rnd()*6-3).toFixed(1)});
+    }
+    return arr;
+  }
+  var Q = {13: makeStudents(72, 13), 14: makeStudents(72, 14), 15: makeStudents(72, 15)};
+  // 第 14 题演示“已审一部分”的接续状态
+  Q[14].slice(0, 40).forEach(function(s){ s.st = "reviewed"; });
+  var MAX = 16, PAGE = 12;
+
+  var S = {qn: 13, filter: "pending", group: "all", page: 1, sel: {}, lastSel: null, menu: null, reviewOn: {13:true,14:true,15:true}, focusIdx: 0, focusList: [], undo: null};
+
+  // ---------- 计算 ----------
+  function items(){ return Q[S.qn]; }
+  function on(){ return S.reviewOn[S.qn]; }
+  function stats(list){
+    var r = 0, c = 0; list.forEach(function(s){ if (s.st === "reviewed") r++; else if (s.st === "corrected") c++; });
+    return {total: list.length, reviewed: r, corrected: c, pending: list.length - r - c};
+  }
+  function filtered(){
+    var f = on() ? S.filter : "all";
+    return items().filter(function(s){
+      if (S.group !== "all" && s.group !== S.group) return false;
+      if (f === "pending") return s.st === "pending";
+      if (f === "done") return s.st !== "pending";
+      return true;
+    }).sort(function(a,b){ return (b.low - a.low) || (a.id - b.id); });
+  }
+  function pageItems(){ var l = filtered(); return l.slice((S.page-1)*PAGE, S.page*PAGE); }
+
+  // ---------- 渲染 ----------
+  var $ = function(id){ return document.getElementById(id); };
+  function esc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
+  function sheetHtml(s){
+    var h = '<div class="hd">13（16分）</div>';
+    LINES.forEach(function(L, li){
+      var line = '<div class="ln">(' + (li+1) + ') ';
+      L.t.forEach(function(part, pi){
+        if (pi > 0) line += esc(part);
+        if (pi < L.k.length) line += '<span class="h" style="--rot:' + s.rot + 'deg">' + s.ans[li][pi] + '</span>';
+      });
+      if (L.t.length > L.k.length) line += esc(L.t[L.t.length-1]);
+      h += line + '</div>';
+    });
+    return h;
+  }
+  function pillHtml(s){
+    if (s.st === "corrected") return '<span class="pill corrected">已修正</span>';
+    if (!on()) return "";
+    if (s.st === "reviewed") return '<button class="pill reviewed" data-act="toggle" data-id="' + s.id + '" title="点击撤回为待审">✓ 已审</button>';
+    return '<button class="pill pending" data-act="toggle" data-id="' + s.id + '" title="确认这张无误">待审</button>';
+  }
+  function render(){
+    // 题号
+    $("qnList").innerHTML = [13,14,15].map(function(q){
+      var st = stats(Q[q]);
+      var sub = S.reviewOn[q] ? (st.pending ? "待审 " + st.pending : "✓ 已审完") : "不审核";
+      return '<button data-act="qn" data-q="' + q + '" aria-pressed="' + (q === S.qn) + '">' + q + '<small>' + sub + '</small></button>';
+    }).join("");
+    $("reviewToggle").setAttribute("aria-checked", on());
+    $("offBanner").hidden = on();
+    $("focusBtn").hidden = !on();
+    // 进度
+    var st = stats(items());
+    if (on()) {
+      var pr = st.reviewed / st.total * 100, pc = st.corrected / st.total * 100;
+      $("prog").innerHTML = '<span class="lbl">批改完成</span><span class="bar" aria-hidden="true"><i class="r" style="width:' + pr + '%"></i><i class="c" style="width:' + pc + '%"></i></span>' +
+        '<span class="num">审核进度 <strong>' + (st.reviewed + st.corrected) + '</strong> / ' + st.total + '（含修正 ' + st.corrected + '），剩余 <strong>' + st.pending + '</strong></span>';
+      $("filterSeg").innerHTML = [["pending","待审核 " + st.pending],["done","已审核 " + (st.reviewed + st.corrected)],["all","全部 " + st.total]].map(function(x){
+        return '<button data-act="filter" data-f="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>';
+      }).join("");
+    } else {
+      $("prog").innerHTML = '<span class="lbl">批改完成</span><span class="num">共 ' + st.total + ' 份</span>';
+      $("filterSeg").innerHTML = "";
+    }
+    // 分组
+    var groups = {};
+    items().forEach(function(s){ (groups[s.group] = groups[s.group] || []).push(s); });
+    var keys = Object.keys(groups).map(Number).sort(function(a,b){ return b - a; });
+    var gh = '<button class="g" data-act="group" data-g="all" aria-pressed="' + (S.group === "all") + '"><span class="s">全部</span><span class="cnt">' + st.total + '份</span><span></span></button>';
+    keys.forEach(function(k){
+      var gs = stats(groups[k]), done = gs.total - gs.pending;
+      gh += '<div class="g" role="button" tabindex="0" data-act="group" data-g="' + k + '" aria-pressed="' + (S.group === k) + '">' +
+        '<span class="s">' + k + '</span><span class="cnt">' + gs.total + '份</span>' +
+        '<button class="more" data-act="menu" data-g="' + k + '" aria-label="' + k + '分组操作">⋮</button>' +
+        (on() ? '<span class="sub">' + (gs.pending ? '<span>待审 ' + gs.pending + '</span><span class="mini"><i style="width:' + (done/gs.total*100) + '%"></i></span>' : '<span class="done">✓ 本组已审完</span>') + '</span>' : '') +
+        (S.menu === k ? menuHtml(k, gs) : '') + '</div>';
+    });
+    $("groups").innerHTML = gh;
+    // 卡片
+    var list = pageItems(), all = filtered();
+    var maxPage = Math.max(1, Math.ceil(all.length / PAGE));
+    if (S.page > maxPage) { S.page = maxPage; list = pageItems(); }
+    var anySel = Object.keys(S.sel).length > 0;
+    $("grid").className = "grid" + (anySel ? " selecting" : "");
+    if (!list.length) {
+      $("grid").innerHTML = on() && S.filter === "pending"
+        ? '<div class="empty"><strong>✓ ' + (S.group === "all" ? "本题" : S.group + " 分组") + '已全部审核</strong><span>共 ' + st.total + ' 份，其中修正 ' + st.corrected + ' 份。可切换到“已审核”复查，或去下一题。</span>' + nextQnBtn() + '</div>'
+        : '<div class="empty">没有符合条件的卷子</div>';
+    } else {
+      $("grid").innerHTML = list.map(function(s){
+        var sel = !!S.sel[s.id];
+        return '<div class="card st-' + s.st + (sel ? " sel" : "") + '" data-id="' + s.id + '">' +
+          '<div class="sheet" data-act="pick" data-id="' + s.id + '" title="点击选择；双击逐份查看">' + sheetHtml(s) + '</div>' +
+          '<div class="tags">' + pillHtml(s) + (s.low && s.st === "pending" && on() ? '<span class="pill low">低置信</span>' : '') + '</div>' +
+          '<span class="chk" aria-hidden="true">' + (sel ? "✓" : "") + '</span>' +
+          '<div class="foot"><span class="name">' + esc(s.name) + '</span>' +
+          (s.st === "corrected" ? '<span class="delta">AI ' + s.ai + '→' + s.score + '</span>' : '') +
+          '<span class="step"><button data-act="dec" data-id="' + s.id + '" aria-label="减分">−</button><span>' + s.score + '<small>分</small></span><button data-act="inc" data-id="' + s.id + '" aria-label="加分">+</button></span></div></div>';
+      }).join("");
+    }
+    // 分页
+    var ph = '';
+    if (maxPage > 1) {
+      ph += '<span>共 ' + all.length + ' 份</span>';
+      for (var p = 1; p <= maxPage; p++) ph += '<button data-act="page" data-p="' + p + '" aria-current="' + (p === S.page) + '">' + p + '</button>';
+    }
+    $("pager").innerHTML = ph;
+    renderDock(list);
+  }
+  function nextQnBtn(){
+    var nq = [13,14,15].filter(function(q){ return q !== S.qn && S.reviewOn[q] && stats(Q[q]).pending; })[0];
+    return nq ? '<button class="btn primary" data-act="qn" data-q="' + nq + '">去第 ' + nq + ' 题（待审 ' + stats(Q[nq]).pending + '）</button>' : '';
+  }
+  function menuHtml(k, gs){
+    return '<div class="menu" data-stop="1"><b>' + k + ' 分组</b>' +
+      (gs.pending ? '<p>将本组 <b style="color:var(--fg)">' + gs.pending + '</b> 份待审核全部标为已审核。适合满分组或答案高度一致的分组，建议先抽看几份。可撤销。</p>' +
+        '<div class="row"><button class="btn" data-act="menuClose">取消</button><button class="btn primary" data-act="groupConfirm" data-g="' + k + '">确认本组 ' + gs.pending + ' 份</button></div>'
+        : '<p>本组已全部审核。</p><div class="row"><button class="btn" data-act="menuClose">关闭</button></div>') +
+      '<p style="border-top:1px solid var(--line);padding-top:8px">其他：设为人工批改、批量打分（现有功能）</p></div>';
+  }
+  function renderDock(list){
+    var dock = $("dock");
+    dock.hidden = !on() || !document.getElementById("view-proto").offsetParent;
+    if (dock.hidden) return;
+    var ids = Object.keys(S.sel);
+    var pend = list.filter(function(s){ return s.st === "pending"; });
+    var ps = stats(list);
+    $("dockStat").innerHTML = ids.length
+      ? '已选 <b>' + ids.length + '</b> 份'
+      : '本页 <b>' + list.length + '</b> 份：待审 <b>' + ps.pending + '</b> · 已审 ' + ps.reviewed + ' · 已修正 ' + ps.corrected + '<span style="margin-left:10px">发现判错直接改分，改分即视为已审</span>';
+    $("dockActs").innerHTML = ids.length
+      ? '<button class="btn" data-act="selClear">取消选择</button><button class="btn" data-act="selPending">设为待审</button><button class="btn primary" data-act="selReview">标记已审核</button>'
+      : (pend.length ? '<button class="btn primary" data-act="pageConfirm">确认本页' + (ps.corrected || ps.reviewed ? "其余 " : " ") + pend.length + ' 份无误' + (S.filter === "pending" ? "，下一批" : "") + '<kbd>Enter</kbd></button>' : '<span class="stat">本页已全部审核</span>');
+  }
+
+  // ---------- 操作 ----------
+  function find(id){ id = Number(id); return items().filter(function(s){ return s.id === id; })[0]; }
+  function apply(list, st, msg){
+    var snap = list.filter(function(s){ return s.st !== "corrected" && s.st !== st; }).map(function(s){ return [s, s.st]; });
+    if (!snap.length) return;
+    snap.forEach(function(x){ x[0].st = st; });
+    S.undo = snap;
+    toast(msg.replace("{n}", snap.length));
+  }
+  var toastTimer = null;
+  function toast(msg){
+    var t = $("toast");
+    t.innerHTML = '<span>' + msg + '</span>' + (S.undo ? '<button data-act="undo">撤销</button>' : '');
+    t.hidden = false;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ t.hidden = true; S.undo = null; }, 8000);
+  }
+  function setScore(s, v){
+    v = Math.max(0, Math.min(MAX, v));
+    if (v === s.score) return;
+    s.score = v;
+    s.st = v === s.ai ? "reviewed" : "corrected";
+  }
+  function pageConfirm(){
+    var list = pageItems().filter(function(s){ return s.st === "pending"; });
+    if (!list.length) return;
+    var els = list.map(function(s){ return document.querySelector('.card[data-id="' + s.id + '"]'); });
+    els.forEach(function(e){ if (e) e.classList.add("leaving"); });
+    setTimeout(function(){
+      apply(list, "reviewed", "已确认 {n} 份");
+      if (S.filter !== "pending") S.page = Math.min(S.page + 1, Math.max(1, Math.ceil(filtered().length / PAGE)));
+      render();
+      window.scrollTo({top: $("panel").offsetTop - 8, behavior: "smooth"});
+    }, 180);
+  }
+
+  document.addEventListener("click", function(e){
+    var el = e.target.closest("[data-act]");
+    if (S.menu !== null && !e.target.closest("[data-stop]") && !(el && el.dataset.act === "menu")) { S.menu = null; if (!el) { render(); return; } }
+    if (!el) return;
+    var stop = e.target.closest("[data-stop]");
+    if (stop && !stop.contains(el)) return;
+    var a = el.dataset.act, id = el.dataset.id, s;
+    switch (a) {
+      case "qn": S.qn = Number(el.dataset.q); S.group = "all"; S.page = 1; S.sel = {}; S.filter = S.reviewOn[S.qn] ? "pending" : "all"; break;
+      case "filter": S.filter = el.dataset.f; S.page = 1; S.sel = {}; break;
+      case "group": S.group = el.dataset.g === "all" ? "all" : Number(el.dataset.g); S.page = 1; S.sel = {}; break;
+      case "menu": e.stopPropagation(); S.menu = S.menu === Number(el.dataset.g) ? null : Number(el.dataset.g); break;
+      case "menuClose": S.menu = null; break;
+      case "groupConfirm":
+        var g = Number(el.dataset.g);
+        apply(items().filter(function(x){ return x.group === g && x.st === "pending"; }), "reviewed", g + " 分组已确认 {n} 份");
+        S.menu = null; break;
+      case "page": S.page = Number(el.dataset.p); S.sel = {}; window.scrollTo({top: $("panel").offsetTop - 8}); break;
+      case "toggle": s = find(id); if (s.st === "pending") { apply([s], "reviewed", "已确认 1 份"); } else { apply([s], "pending", "已撤回为待审"); } break;
+      case "inc": s = find(id); setScore(s, s.score + 1); break;
+      case "dec": s = find(id); setScore(s, s.score - 1); break;
+      case "pick":
+        var n = Number(id), list = pageItems();
+        if (e.shiftKey && S.lastSel !== null) {
+          var ids = list.map(function(x){ return x.id; }), i1 = ids.indexOf(S.lastSel), i2 = ids.indexOf(n);
+          if (i1 > -1 && i2 > -1) ids.slice(Math.min(i1,i2), Math.max(i1,i2)+1).forEach(function(x){ S.sel[x] = true; });
+        } else if (S.sel[n]) { delete S.sel[n]; } else { S.sel[n] = true; }
+        S.lastSel = n; break;
+      case "selClear": S.sel = {}; break;
+      case "selReview": apply(Object.keys(S.sel).map(find), "reviewed", "已确认 {n} 份"); S.sel = {}; break;
+      case "selPending": apply(Object.keys(S.sel).map(find), "pending", "{n} 份已设为待审"); S.sel = {}; break;
+      case "pageConfirm": pageConfirm(); return;
+      case "undo": if (S.undo) { S.undo.forEach(function(x){ x[0].st = x[1]; }); S.undo = null; $("toast").hidden = true; } break;
+      case "focusClose": closeFocus(); return;
+      case "fq": s = S.focusList[S.focusIdx]; setScore(s, Number(el.dataset.v)); renderFocus(); render(); return;
+      case "fpass": focusPass(); return;
+      case "fprev": S.focusIdx = Math.max(0, S.focusIdx - 1); renderFocus(); return;
+      case "fnext": S.focusIdx = Math.min(S.focusList.length - 1, S.focusIdx + 1); renderFocus(); return;
+      default: return;
+    }
+    render();
+  });
+  document.addEventListener("dblclick", function(e){
+    var el = e.target.closest('.sheet[data-id]');
+    if (!el || !on()) return;
+    S.sel = {};
+    var list = filtered(), n = Number(el.dataset.id);
+    openFocus(list, Math.max(0, list.map(function(x){ return x.id; }).indexOf(n)));
+  });
+  $("reviewToggle").addEventListener("click", function(){ S.reviewOn[S.qn] = !S.reviewOn[S.qn]; S.filter = S.reviewOn[S.qn] ? "pending" : "all"; S.page = 1; S.sel = {}; render(); });
+  $("focusBtn").addEventListener("click", function(){
+    var list = filtered();
+    if (!list.length) { toast("当前筛选下没有卷子"); return; }
+    openFocus(list, 0);
+  });
+
+  // ---------- 逐份审核 ----------
+  function openFocus(list, idx){ S.focusList = list; S.focusIdx = idx; $("focus").hidden = false; renderFocus(); }
+  function closeFocus(){ $("focus").hidden = true; render(); }
+  function focusPass(){
+    var s = S.focusList[S.focusIdx];
+    if (s.st === "pending") s.st = "reviewed";
+    if (S.focusIdx < S.focusList.length - 1) { S.focusIdx++; renderFocus(); render(); }
+    else { closeFocus(); toast("已到最后一份"); }
+  }
+  function renderFocus(){
+    var s = S.focusList[S.focusIdx], st = stats(S.focusList);
+    var quick = [0,4,8,12,16].map(function(v){ return '<button data-act="fq" data-v="' + v + '" aria-pressed="' + (s.score === v) + '">' + v + '</button>'; }).join("");
+    var stLabel = s.st === "corrected" ? '<span class="pill corrected">已修正 AI ' + s.ai + '→' + s.score + '</span>' : s.st === "reviewed" ? '<span class="pill reviewed">✓ 已审</span>' : '<span class="pill pending">待审</span>';
+    $("focus").innerHTML = '<div class="fbox" role="dialog" aria-modal="true" aria-label="逐份审核" data-stop="1">' +
+      '<div class="top"><b>逐份审核 · 第 ' + (S.focusIdx+1) + ' / ' + S.focusList.length + ' 份</b><span class="num" style="color:var(--muted);font-size:13px">本轮已处理 ' + (st.reviewed + st.corrected) + '</span><button class="btn ghost" data-act="focusClose">关闭 <kbd>Esc</kbd></button></div>' +
+      '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="name">' + esc(s.name) + '</span>' + stLabel + (s.low ? '<span class="pill low">低置信 ' + Math.round(s.conf*100) + '%</span>' : '') + '</div>' +
+      '<div class="sheet">' + sheetHtml(s) + '</div>' +
+      '<div class="ai">AI 判分 <b>' + s.ai + ' 分</b>　依据：' + LINES.map(function(L, i){ var ok = s.ans[i].join() === L.k.join(); return '(' + (i+1) + ')' + (ok ? '✓' : '✗'); }).join(' ') + '</div>' +
+      '<div class="quick"><span style="color:var(--muted);font-size:13px">改分：</span>' + quick + '<span class="step" style="margin-left:4px"><button data-act="fq" data-v="' + (s.score-1) + '">−</button><span>' + s.score + '<small>分</small></span><button data-act="fq" data-v="' + (s.score+1) + '">+</button></span></div>' +
+      '<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap"><div style="display:flex;gap:8px"><button class="btn" data-act="fprev">上一份 <kbd>←</kbd></button><button class="btn" data-act="fnext">下一份 <kbd>→</kbd></button></div>' +
+      '<button class="btn primary" data-act="fpass">' + (s.st === "corrected" ? "保存并下一份" : "通过并下一份") + '<kbd>Enter</kbd></button></div></div>';
+  }
+
+  document.addEventListener("keydown", function(e){
+    if (e.target.matches("input,textarea") ) return;
+    var focusOpen = !$("focus").hidden;
+    if (focusOpen) {
+      if (e.key === "Escape") closeFocus();
+      else if (e.key === "Enter") { e.preventDefault(); focusPass(); }
+      else if (e.key === "ArrowLeft") { S.focusIdx = Math.max(0, S.focusIdx - 1); renderFocus(); }
+      else if (e.key === "ArrowRight") { S.focusIdx = Math.min(S.focusList.length - 1, S.focusIdx + 1); renderFocus(); }
+      return;
+    }
+    if (e.key === "Enter" && on() && !$("view-proto").hidden && !e.target.closest("button")) { e.preventDefault(); if (Object.keys(S.sel).length) { apply(Object.keys(S.sel).map(find), "reviewed", "已确认 {n} 份"); S.sel = {}; render(); } else pageConfirm(); }
+    if (e.key === "Escape" && Object.keys(S.sel).length) { S.sel = {}; render(); }
+  });
+
+  // ---------- 页签 ----------
+  $("view-doc").appendChild($("docTpl").content.cloneNode(true));
+  function showTab(doc){
+    $("tab-proto").setAttribute("aria-selected", !doc);
+    $("tab-doc").setAttribute("aria-selected", doc);
+    $("view-proto").hidden = doc; $("panel").hidden = doc; $("view-doc").hidden = !doc;
+    render();
+  }
+  $("tab-proto").addEventListener("click", function(){ showTab(false); });
+  $("tab-doc").addEventListener("click", function(){ showTab(true); });
+  showTab(location.hash === "#design");
+})();
+</script>
+
+</body>
+</html>

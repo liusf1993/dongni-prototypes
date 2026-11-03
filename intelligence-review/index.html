@@ -47,7 +47,7 @@ button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .frow .gl{color:var(--muted)}
 .qopt{border:0;background:none;height:32px;padding:0 8px;border-radius:6px;color:var(--text);display:inline-flex;align-items:center;gap:4px;position:relative}
 .qopt.on{background:var(--brand-bg);color:var(--brand-dark);font-weight:600}
-.qopt .dot{position:absolute;top:4px;right:1px;width:7px;height:7px;border-radius:50%;background:var(--warn)}
+.qopt .dot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ok);margin-left:1px}
 .tr-btns{display:flex;flex-direction:column;gap:8px;align-items:stretch}
 .ebtn{border:1px solid var(--border2);background:var(--white);color:var(--text2);border-radius:6px;padding:7px 15px;font-size:13px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
 .ebtn:hover{color:var(--brand);border-color:#b3e4e5;background:var(--brand-bg)}
@@ -270,7 +270,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li>排序全部由服务端完成（置信度低在前），前端不再排序；卡片不显示低置信标签。</li>
       <li>“已修正”不单独存储，由老师当前分与 AI 原始分比较得出。</li>
       <li>审核模式下单张改分不刷新列表、不再弹“保存成功”；确认时分数已变化的卷子静默跳过。</li>
-      <li>题号上只显示待审小圆点，分题审核进度和 AI 判分一致率放进“进度总览”。</li>
+      <li>题号右侧在审核完成后显示绿色小圆点（未审完不显示），分题审核进度和 AI 判分一致率放进“进度总览”。</li>
       <li>暂不做：确认已看过的、悬停看评分理由、详情弹窗快捷键、抽检；作文题放到下一期。</li>
     </ul>
   </div>
@@ -317,7 +317,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <tr><td>满分组/一致答案组</td><td>左侧分组 ⋮ → 确认本组待审核（菜单内二次确认）</td><td>3 次</td></tr>
       <tr><td>可疑件细看</td><td>点图片打开现有“学生作答详情”，右侧新增审核区：“通过并下一份”跳到下一份待审，← → 翻看（现有），改分即修正</td><td>每份 1 次</td></tr>
       <tr><td>批量打分</td><td>沿用现有批量打分；被改到的卷子一律记为已修正</td><td>不变</td></tr>
-      <tr><td>接着昨天继续</td><td>打开即是待审核视图；题号上有待审小圆点，“进度总览”看每题剩余</td><td>0</td></tr>
+      <tr><td>接着昨天继续</td><td>打开即是待审核视图；审完的题号右侧有绿点，“进度总览”看每题剩余</td><td>0</td></tr>
     </table></div>
   </div>
 
@@ -326,7 +326,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <p>原则：复用现有页面与交互，审核能力做成独立组件和 mixin 接入，<code>index.vue</code> 只改接入点；“本题需要审核”关闭或后端未上线时，新组件全部不渲染，页面与现在一致。原型中虚线框标出的就是新增部分。</p>
     <div class="tbl"><table>
       <tr><th>位置</th><th>现有</th><th>新增 / 改动</th><th>实现</th></tr>
-      <tr><td>题号筛选 <code>dn-filter-item-v2</code> 自定义 slot</td><td>填空题/解答题/作文分组的题号</td><td>还有待审时题号右上角小圆点</td><td>题号列表接口返回每题是否有待审</td></tr>
+      <tr><td>题号筛选 <code>dn-filter-item-v2</code> 自定义 slot</td><td>填空题/解答题/作文分组的题号</td><td>本题审核完成后，题号右侧显示绿色小圆点；未审完不显示</td><td>题号列表接口返回每题是否已审完</td></tr>
       <tr><td>页头 <code>filter-top-beijin</code></td><td>“智能批改”标题、“设置智能批改”按钮</td><td>按钮左侧“审核模式”开关，作用于当前题</td><td>按 paperReadId 读写 <code>t_paper_read_extension.review_required</code>；切换后重新拉取当前题列表；不改 <code>set-ai-read.vue</code>；可见范围沿用“设置智能批改”按钮，是否限制普通阅卷老师切换待确认</td></tr>
       <tr><td>进度总览弹窗 <code>openProgressModal</code></td><td>各题批改进度</td><td>增加“审核进度”“AI 判分一致率”两列</td><td>进度接口增加每题已审、改分、待审数</td></tr>
       <tr><td>吸顶工具条左侧</td><td>批改完成 ⌄、剩余人工批改数、刷新</td><td>审核进度条 + 待审核/已审核/全部 筛选</td><td>新组件 <code>review-progress</code>；筛选值作为 <code>getListResultDetail</code> 的 <code>reviewStatus</code> 参数</td></tr>
@@ -489,7 +489,7 @@ ALTER TABLE t_paper_read_extension
     $("reviewSw").setAttribute("aria-checked", on());
     $("qnList").innerHTML = [13,14,15].map(function(q){
       var st = stats(Q[q]);
-      var dot = S.on[q] && st.pending ? '<span class="dot isnew" title="还有待审核的卷子，详见进度总览"></span>' : '';
+      var dot = S.on[q] && !st.pending ? '<span class="dot" title="本题已审核完成"></span>' : '';
       return '<button class="qopt' + (q === S.qn ? ' on' : '') + '" data-act="qn" data-q="' + q + '">' + q + dot + '</button>';
     }).join("");
 

@@ -163,7 +163,6 @@ button.tag.rev:hover{background:#d5eedf}
 .ptbl{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
 .ptbl th,.ptbl td{border-bottom:1px solid #ebeef5;padding:10px 12px;text-align:left}
 .ptbl th{color:var(--muted);font-weight:500;background:#fafafa}
-kbd{font-family:ui-monospace,Menlo,monospace;font-size:11px;border:1px solid currentColor;border-radius:3px;padding:0 4px;margin-left:6px;opacity:.8}
 .toast{position:fixed;left:50%;top:24px;transform:translateX(-50%);z-index:60;background:#f0f9eb;border:1px solid #e1f3d8;color:#67c23a;border-radius:4px;padding:10px 16px;display:flex;gap:16px;align-items:center;font-size:14px;box-shadow:0 2px 12px rgba(0,0,0,.1);max-width:calc(100vw - 32px)}
 .toast button{border:0;background:none;color:var(--brand);font-weight:600;padding:0}
 
@@ -226,7 +225,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <span><i></i>虚线框 = 本次新增的元素，其余为现有页面</span>
       <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="legendToggle" checked> 显示新增标记</label>
       <label style="display:inline-flex;gap:6px;align-items:center">场景 <select id="modeSel" class="psel"><option value="exam">考试（显示 exam_item_id）</option><option value="homework">作业（显示姓名）</option></select></label>
-      <span>审核开关在“设置智能批改”旁边，作用于当前题；快捷键：Enter 确认本页</span>
+      <span>审核开关在“设置智能批改”旁边，作用于当前题；审核不使用快捷键，均通过按钮操作</span>
     </div>
 
     <div class="top">
@@ -284,6 +283,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li>单份可标“疑”（存疑）：暂不确定先跳过，离开待审核列表，进“存疑”筛选，后面再审；存疑未清完不算审完（题号不亮绿点）。</li>
       <li>分页可选 20 / 40 / 80 / 100 条每页。</li>
       <li>卡片身份：作业显示学生姓名；考试显示 exam_item_id（小号等宽字体），与现有详情标题口径一致。</li>
+      <li>不使用 Enter 等快捷键确认，避免在输入分数时误触整页确认；所有审核动作都通过按钮完成。</li>
       <li>暂不做：确认已看过的、悬停看评分理由、详情弹窗快捷键、抽检；作文题放到下一期。</li>
     </ul>
   </div>
@@ -324,7 +324,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <h3>4. 场景与操作成本</h3>
     <div class="tbl"><table>
       <tr><th>场景</th><th>操作</th><th>成本</th></tr>
-      <tr><td>一页都对</td><td>底部审核条“确认本页 N 份无误”，或按 Enter</td><td>1 次</td></tr>
+      <tr><td>一页都对</td><td>底部审核条“确认本页 N 份无误”</td><td>1 次</td></tr>
       <tr><td>一页有 2 张错</td><td>用卡片现有的分数步进器改这 2 张（自动记为已修正），再确认本页其余</td><td>改分 + 1 次</td></tr>
       <tr><td>单张</td><td>悬停卡片，点右上角“✓ 确认”；已审的点“✓ 已审”标签可撤回</td><td>1 次</td></tr>
       <tr><td>挑一批确认</td><td>点“批量打分”进入现有批量模式（当前页/全部勾选），审核模式下底部条多出“标记已审核”</td><td>勾选 + 1 次</td></tr>
@@ -602,7 +602,7 @@ ALTER TABLE t_paper_read_extension
     b.className = "bbar isnew";
     b.hidden = false;
     b.innerHTML = '<div class="l"><span>当前页 <b>' + list.length + '</b> 份：待审 <b>' + ps.pending + '</b> · 已审 ' + ps.reviewed + ' · 已修正 ' + ps.corrected + (ps.doubt ? ' · 存疑 ' + ps.doubt : '') + '</span><span style="color:var(--muted)">判错的直接改分；拿不准的标“疑”先跳过</span></div>' +
-      '<div class="rr">' + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '<kbd>Enter</kbd></button>' : '<span style="color:var(--ok)">✓ 本页已过完' + (ps.doubt ? '（存疑 ' + ps.doubt + ' 份留待后审）' : '') + '</span>') + '</div>';
+      '<div class="rr">' + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '</button>' : '<span style="color:var(--ok)">✓ 本页已过完' + (ps.doubt ? '（存疑 ' + ps.doubt + ' 份留待后审）' : '') + '</span>') + '</div>';
   }
   function selectedIds(){ return S.selAll ? filtered().map(function(s){ return s.id; }) : Object.keys(S.sel).map(Number); }
 
@@ -748,7 +748,6 @@ ALTER TABLE t_paper_read_extension
       return;
     }
     if (e.target.matches("input,textarea,button")) return;
-    if (e.key === "Enter" && on() && !S.batch && !$("view-proto").hidden) { e.preventDefault(); pageConfirm(); }
     if (e.key === "Escape" && S.batch) { exitBatch(); render(); }
   });
   window.addEventListener("scroll", function(){ var t = $("toolbar"); t.classList.toggle("stuck", t.getBoundingClientRect().top <= 0); }, {passive: true});

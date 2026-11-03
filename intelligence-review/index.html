@@ -224,7 +224,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <div class="main" id="panel">
       <div class="toolbar" id="toolbar">
         <div class="tl">
-          <span class="finish">批改完成 ⌄ <button class="refresh">↻ 刷新</button></span>
+          <span class="finish">批改完成 ⌄ <button class="refresh" data-act="refresh">↻ 刷新</button></span>
           <span class="rv isnew" id="rv"></span>
           <span class="rg isnew" id="rg" role="group" aria-label="审核筛选"></span>
         </div>
@@ -315,6 +315,19 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   </div>
 
   <div>
+    <h3>5.1 改分后列表刷新：保证“确认本页”确认的就是看过的那一页</h3>
+    <p><b>现状</b>：<code>setSubmitItems</code> 保存成功后会依次调用 <code>getIntelligenceCount</code>、<code>getListAiResult</code>、<code>getData(this.pageNo)</code>。在“16 分”组里改了 2 份，这 2 份移到别的组，下一页的前 2 份补到本页；详情弹窗打开时也会静默刷新。此时点“确认本页”，会把没看过的卷子一起确认，翻到下一页还会漏看 2 份。</p>
+    <ol>
+      <li><b>本页快照</b>：进入一页时记下这页卷子的 ID 和当时显示的分数。审核模式下改分只更新这张卡片（显示“已修正 16→12 · 已移至 12 分组”）和左侧、题号的计数，<b>不重新拉列表</b>。翻页、切换分组/筛选、确认本页、点“刷新”时才重新获取。</li>
+      <li><b>确认按快照提交</b>：“确认本页”提交快照中的 <code>examItemId + seenScore</code>，不提交当前列表。服务端只确认仍为待审核、且分数没变的行；别的老师刚改过或 AI 重批过的会被跳过，前端提示“已确认 10 份，2 份分数已变化未确认”，并保留在待审核中。</li>
+      <li><b>翻页不漏看</b>：审核默认用“待审核”筛选。确认过的卷子离开结果集，确认后总是重新取第 1 页，就是下一批，不依赖页码偏移。“全部/已审核”视图下确认本页后留在当前页刷新，不自动翻页。</li>
+      <li><b>详情弹窗</b>：上一份/下一份基于打开弹窗时的快照列表，弹窗打开期间不因改分重排。</li>
+      <li><b>影响面</b>：只在“本题需要审核”开启时改变刷新时机；关闭时保持现有 <code>setSubmitItems</code> 刷新逻辑。批量打分、整组改分、设为人工本来就作用于整组，仍按现有逻辑刷新，同时清空快照。</li>
+    </ol>
+    <p class="muted">原型已按此实现：在 16 分组里改分，卡片留在原位并提示已移组；左侧计数立即变化；点“确认本页”只确认这页剩下的；点工具条“刷新”才重新取这一页。</p>
+  </div>
+
+  <div>
     <h3>6. 不需要审核的场景</h3>
     <ul>
       <li><b>审核不卡任何流程</b>：不阻断阅卷完成、出成绩、发布报告。它是老师的工作进度工具，不是质量门禁。</li>
@@ -337,7 +350,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <p class="muted">迁移放 fat-service <code>db/migration/exam/2026/</code>，命名 <code>V20261103.1.506__add_intelligence_review_status.sql</code>（实施当天日期）。需评估表量级与 MySQL 5.7 加列锁表时间；TiDB 为在线 DDL。旧版本服务不读不写新列，可先发迁移再发代码。</p>
     <p><b>接口</b>（考试 <code>/exam/intelligence/*</code> 与作业 <code>/exam/studyGuideIntelli/*</code> 两套都要加）：</p>
     <ul>
-      <li><code>POST …/review</code> <code>{paperReadId, examItemIds[], reviewStatus: 0|1}</code>：按 ID 设置。只更新属于该 paperRead、finallyScore ≥ 0、review_status ≠ 2 的行；幂等；返回实际更新数。“确认本页”也传本页 ID，避免刷新后页内容变化导致确认到没看过的卷子。</li>
+      <li><code>POST …/review</code> <code>{paperReadId, items: [{examItemId, seenScore}], reviewStatus: 0|1}</code>：按卷子设置。确认（1）时只更新属于该 paperRead、review_status = 0、且当前 finallyScore 等于 seenScore 的行；其余跳过并返回跳过数和原因（已被修正 / 分数已变化）。撤回（0）不比较分数、不动已修正。幂等。</li>
       <li><code>POST …/reviewGroup</code> <code>{paperReadId, readScore | ocrText, expectedCount}</code>：整组确认。服务端统计该组待审数，与 expectedCount 不一致则拒绝并返回最新数量（防止期间新批改出来的卷子被一并放行）。</li>
       <li>撤销：前端记住本次操作的 ID 与原状态，调用 review 回写为 0。</li>
       <li><code>listAiDetail</code> 增加 <code>reviewStatus</code> 筛选参数，返回 <code>reviewStatus / reviewerName / reviewDateTime / aiScore</code>；<code>listAiResult</code> 分组结果增加 <code>pendingCount</code>；题号列表接口增加每题待审数。</li>
@@ -398,7 +411,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   var Q = {13: makeStudents(72, 13), 14: makeStudents(72, 14), 15: makeStudents(72, 15)};
   Q[14].slice(0, 40).forEach(function(s){ s.st = "reviewed"; });
   var MAX = 16, PAGE = 12;
-  var S = {qn: 13, filter: "pending", group: "all", page: 1, batch: 0, sel: {}, selAll: false, menu: null, menuConfirm: false, on: {13:true,14:true,15:true}, detail: null, undo: null, keep: {}};
+  var S = {qn: 13, filter: "pending", group: "all", page: 1, batch: 0, sel: {}, selAll: false, menu: null, menuConfirm: false, on: {13:true,14:true,15:true}, detail: null, undo: null, view: null};
 
   var $ = function(id){ return document.getElementById(id); };
   function esc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
@@ -409,13 +422,16 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     var f = on() ? S.filter : "all";
     return items().filter(function(s){
       if (S.group !== "all" && s.group !== S.group) return false;
-      if (S.keep[s.id]) return true; // 本页刚处理过的卡片原位保留，换页/确认本页后才离开
       if (f === "pending") return s.st === "pending";
       if (f === "done") return s.st !== "pending";
       return true;
     }).sort(function(a,b){ return (b.low - a.low) || (a.id - b.id); });
   }
-  function pageItems(){ return filtered().slice((S.page-1)*PAGE, S.page*PAGE); }
+  // 本页快照：进入一页时记下卷子 ID 和看到的分数；改分只更新卡片，翻页/切组/确认本页/刷新时才重新取
+  function pageItems(){
+    if (!S.view) S.view = filtered().slice((S.page-1)*PAGE, S.page*PAGE).map(function(s){ return {id: s.id, seen: s.score}; });
+    return S.view.map(function(v){ return find(v.id); });
+  }
   function find(id){ id = Number(id); return items().filter(function(s){ return s.id === id; })[0]; }
 
   function sheet(s){
@@ -431,7 +447,8 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     return h;
   }
   function reviewTag(s){
-    if (s.st === "corrected") return '<span class="tag cor isnew" title="老师改过分数，视为已审">已修正 ' + s.ai + '→' + s.score + '</span>';
+    var moved = S.group !== "all" && s.group !== S.group ? '<span class="tag isnew" style="background:#f4f4f5;color:var(--muted)" title="已移出本组，刷新或翻页后不再显示">已移至 ' + s.group + ' 分组</span>' : '';
+    if (s.st === "corrected") return '<span class="tag cor isnew" title="老师改过分数，视为已审">已修正 ' + s.ai + '→' + s.score + '</span>' + moved;
     if (!on()) return '';
     if (s.st === "reviewed") return '<button class="tag rev isnew" data-act="unreview" data-id="' + s.id + '" title="张老师 · 刚刚审核；点击撤回为待审">✓ 已审</button>';
     return '';
@@ -475,7 +492,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
 
     var list = pageItems(), all = filtered();
     var maxPage = Math.max(1, Math.ceil(all.length / PAGE));
-    if (S.page > maxPage) { S.page = maxPage; list = pageItems(); }
+    if (S.page > maxPage) { S.page = maxPage; S.view = null; list = pageItems(); }
     $("grid").className = "grid" + (S.batch ? " batch" : "");
     if (!list.length) {
       $("grid").innerHTML = on() && S.filter === "pending"
@@ -542,7 +559,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   function apply(list, st, msg){
     var snap = list.filter(function(s){ return s.st !== "corrected" && s.st !== st; }).map(function(s){ return [s, s.st]; });
     if (!snap.length) return;
-    snap.forEach(function(x){ x[0].st = st; S.keep[x[0].id] = true; });
+    snap.forEach(function(x){ x[0].st = st; });
     S.undo = snap; toast(msg.replace("{n}", snap.length), true);
   }
   var tt = null;
@@ -555,24 +572,26 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   function setScore(s, v){
     v = Math.max(0, Math.min(MAX, v));
     if (isNaN(v) || v === s.score) return;
-    s.score = v; s.st = v === s.ai ? "reviewed" : "corrected"; S.keep[s.id] = true;
+    s.score = v; s.group = v; s.st = v === s.ai ? "reviewed" : "corrected";
   }
   function exitBatch(){ S.batch = 0; S.sel = {}; S.selAll = false; }
   function pageConfirm(){
-    var list = pageItems().filter(function(s){ return s.st === "pending"; });
+    var seen = {}; (S.view || []).forEach(function(v){ seen[v.id] = v.seen; });
+    var list = pageItems().filter(function(s){ return s.st === "pending" && s.score === seen[s.id]; });
     if (!list.length) return;
     list.forEach(function(s){ var e = document.querySelector('.card[data-id="' + s.id + '"]'); if (e) e.classList.add("leaving"); });
     setTimeout(function(){
       apply(list, "reviewed", "已确认本页 {n} 份");
-      S.keep = {};
-      if (S.filter !== "pending") S.page = Math.min(S.page + 1, Math.max(1, Math.ceil(filtered().length / PAGE)));
+      // 待审核视图：确认过的离开结果集，重新取第 1 页就是下一批；其他视图留在本页刷新，避免分页偏移漏看
+      S.view = null;
+      if (S.filter === "pending") S.page = 1;
       render(); window.scrollTo({top: $("panel").offsetTop, behavior: "smooth"});
     }, 180);
   }
 
   // 详情弹窗
   function openDetail(id){ S.detail = {list: filtered().map(function(s){ return s.id; }), id: Number(id)}; $("mask").hidden = false; renderDetail(); }
-  function closeDetail(){ S.detail = null; S.keep = {}; $("mask").hidden = true; render(); }
+  function closeDetail(){ S.detail = null; $("mask").hidden = true; render(); }
   function navDetail(d){ var l = S.detail.list, i = l.indexOf(S.detail.id) + d; if (i >= 0 && i < l.length) { S.detail.id = l[i]; renderDetail(); } }
   function passDetail(){
     var s = find(S.detail.id);
@@ -601,7 +620,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     inp.addEventListener("change", function(){ setScore(s, Number(inp.value)); render(); });
   }
 
-  var RESET_KEEP = {qn:1, filter:1, group:1, page:1}, CLEAR_AFTER = {groupConfirm:1, breview:1, bpending:1, bset:1};
+  var RESET_VIEW = {qn:1, filter:1, group:1, page:1, refresh:1}, CLEAR_AFTER = {groupConfirm:1, breview:1, bpending:1, bset:1};
   document.addEventListener("click", function(e){
     var el = e.target.closest("[data-act]");
     if (S.menu !== null && !e.target.closest("[data-stop]") && !(el && el.dataset.act === "menu")) { S.menu = null; S.menuConfirm = false; if (!el) { render(); return; } }
@@ -609,7 +628,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     var stop = e.target.closest("[data-stop]");
     if (stop && !stop.contains(el)) return;
     var a = el.dataset.act, id = el.dataset.id, s;
-    if (RESET_KEEP[a]) S.keep = {};
+    if (RESET_VIEW[a]) S.view = null;
     switch (a) {
       case "qn": S.qn = Number(el.dataset.q); S.group = "all"; S.page = 1; exitBatch(); S.filter = S.on[S.qn] ? "pending" : "all"; break;
       case "filter": S.filter = el.dataset.f; S.page = 1; S.sel = {}; S.selAll = false; break;
@@ -633,6 +652,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       case "bpending": apply(selectedIds().map(find), "pending", "{n} 份已设为待审核"); exitBatch(); break;
       case "bset": var v = Number(el.dataset.v), n = 0; selectedIds().map(find).forEach(function(x){ var before = x.score; setScore(x, v); if (x.score !== before) n++; }); exitBatch(); toast("已修改 " + n + " 份分数，均记为已修正", false); break;
       case "pageConfirm": pageConfirm(); return;
+      case "refresh": break;
       case "undo": if (S.undo) { S.undo.forEach(function(x){ x[0].st = x[1]; }); S.undo = null; $("toast").hidden = true; } break;
       case "dclose": closeDetail(); return;
       case "dprev": navDetail(-1); return;
@@ -640,10 +660,10 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       case "dpass": passDetail(); return;
       default: return;
     }
-    if (CLEAR_AFTER[a]) S.keep = {};
+    if (CLEAR_AFTER[a]) S.view = null;
     render();
   });
-  $("reviewToggle").addEventListener("click", function(){ S.keep = {}; S.on[S.qn] = !S.on[S.qn]; S.filter = S.on[S.qn] ? "pending" : "all"; S.page = 1; exitBatch(); render(); });
+  $("reviewToggle").addEventListener("click", function(){ S.view = null; S.on[S.qn] = !S.on[S.qn]; S.filter = S.on[S.qn] ? "pending" : "all"; S.page = 1; exitBatch(); render(); });
   $("legendToggle").addEventListener("change", function(e){ $("wrap").classList.toggle("legend-off", !e.target.checked); });
   document.addEventListener("keydown", function(e){
     if (S.detail) {

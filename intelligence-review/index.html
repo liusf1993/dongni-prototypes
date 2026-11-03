@@ -86,14 +86,12 @@ button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
 .node{position:relative;display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:6px;border-left:3px solid transparent;color:var(--text2);cursor:pointer;overflow:visible}
 .node.on{background:var(--brand-bg);color:var(--brand-dark);font-weight:600;border-left-color:var(--brand)}
 .node .lab{font-size:15px;display:flex;align-items:center;gap:6px}
-.node .ok{color:var(--ok);font-size:12px;font-weight:600}
+.node .ok{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--ok)}
 .node .r{display:flex;align-items:center;gap:4px}
 .badge{border-radius:10px;padding:2px 8px;font-size:11px;line-height:12px;background:var(--brand);color:#fff;font-weight:500;font-variant-numeric:tabular-nums}
 .badge.pend{background:var(--warn-bg);color:var(--warn)}
 .more{border:0;background:none;color:var(--muted);width:20px;height:20px;border-radius:4px;font-size:14px;line-height:1;padding:0}
 .more:hover{background:#ebeef5}
-.np{position:absolute;left:12px;right:12px;bottom:3px;height:2px;background:#ebeef5;border-radius:1px;overflow:hidden}
-.np i{display:block;height:100%;background:var(--ok)}
 .dd{position:absolute;z-index:30;top:100%;right:0;margin-top:4px;min-width:200px;background:#fff;border:1px solid var(--border);border-radius:4px;box-shadow:0 2px 12px rgba(0,0,0,.1);padding:6px 0;font-weight:400;color:var(--text2);cursor:default}
 .dd .it{display:flex;justify-content:space-between;align-items:center;padding:0 16px;line-height:36px;font-size:14px;width:100%;border:0;background:none;text-align:left;color:var(--text2)}
 .dd .it:hover{background:var(--brand-bg);color:var(--brand)}
@@ -346,7 +344,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <tr><td>进度总览弹窗 <code>openProgressModal</code></td><td>各题批改进度</td><td>增加“审核进度”“AI 判分一致率”两列</td><td>进度接口增加每题已审、改分、待审数</td></tr>
       <tr><td>吸顶工具条左侧</td><td>批改完成 ⌄、剩余人工批改数、刷新</td><td>审核进度条 + 待审核/存疑/已审核/全部 筛选</td><td>新组件 <code>review-progress</code>；筛选值作为 <code>getListResultDetail</code> 的 <code>reviewStatus</code> 参数</td></tr>
       <tr><td>吸顶工具条右侧</td><td>查看答案、批量设为人工、批量打分</td><td>不变（不新增“批量审核”）</td><td>—</td></tr>
-      <tr><td>左侧分组树 <code>group-tree</code></td><td>分数/识别结果分组、N份、⋮（将分数调整为、设为人工阅卷）</td><td>审完的组加 ✓、组底部细进度线、⋮ 增加“确认本组待审核”（菜单内确认）</td><td><code>listAiResult</code> 分组返回 <code>pendingCount</code>；<code>handleBatchAction</code> 增加 <code>reviewGroup</code> 命令</td></tr>
+      <tr><td>左侧分组树 <code>group-tree</code></td><td>分数/识别结果分组、N份、⋮（将分数调整为、设为人工阅卷）</td><td>不显示进度；本组审核完成（无待审核、无存疑）后分数右侧显示绿色小圆点；⋮ 增加“确认本组待审核”（菜单内确认）</td><td><code>listAiResult</code> 分组返回是否审完及 <code>pendingCount</code>（整组确认用）；<code>handleBatchAction</code> 增加 <code>reviewGroup</code> 命令</td></tr>
       <tr><td>卡片 <code>box-item-v2</code></td><td>作答图（点击看详情）、作业显示姓名（考试不显示）、待人工标签、分数步进器</td><td>悬停“疑”“✓ 确认”；标签区“✓ 已审 / 疑 / 已修正 16→12 / 已移至 N 分组”；考试显示 exam_item_id（11px 等宽字体）</td><td>新组件 <code>review-status-tag</code>；身份显示沿用 <code>scenarioMode</code>，考试取 <code>examResultItemId</code>；<code>adjustScore</code>/<code>inputChange</code> 保存成功后只更新本卡片</td></tr>
       <tr><td>底部 <code>batch-score-bar</code></td><td>批量模式下的当前页/全部勾选与批量动作</td><td>非批量模式：审核条（确认本页其余 N 份）；批量打分模式：增加“设为待审核 / 标记已审核”</td><td>新组件 <code>review-dock</code>；<code>batch-score-bar</code> 在 <code>batchType = 1</code> 且审核模式时多两个按钮</td></tr>
       <tr><td>学生作答详情 <code>dn-modal</code>（80vw）</td><td>左：作答图+识别结果；右：得分修改、评分理由；外侧左右箭头</td><td>右侧新增审核区：状态、“通过并下一份”按钮</td><td>扩展现有弹窗；本期不加快捷键</td></tr>
@@ -533,10 +531,9 @@ ALTER TABLE t_paper_read_extension
     keys.forEach(function(k){
       var gs = stats(groups[k]), done = gs.total - gs.pending;
       th += '<li><div class="node' + (S.group === k ? ' on' : '') + '" data-act="group" data-g="' + k + '">' +
-        '<span class="lab">' + k + (on() && !gs.pending ? '<span class="ok isnew" title="本组已审完">✓</span>' : '') + '</span>' +
-        '<span class="r"><span class="badge" title="' + (on() ? '待审 ' + gs.pending : '') + '">' + gs.total + '份</span>' +
+        '<span class="lab">' + k + (on() && !gs.left ? '<span class="ok" title="本组已审核完成"></span>' : '') + '</span>' +
+        '<span class="r"><span class="badge">' + gs.total + '份</span>' +
         (S.batch ? '' : '<button class="more" data-act="menu" data-g="' + k + '" aria-label="' + k + '分组操作">⋮</button>') + '</span>' +
-        (on() && gs.pending && done ? '<span class="np isnew"><i style="width:' + (done/gs.total*100) + '%"></i></span>' : '') +
         (S.menu === k ? menu(k, gs) : '') + '</div></li>';
     });
     $("tree").innerHTML = th;

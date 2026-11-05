@@ -223,13 +223,13 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <span><i></i>虚线框 = 本次新增的元素，其余为现有页面</span>
       <label style="display:inline-flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" id="legendToggle" checked> 显示新增标记</label>
       <label style="display:inline-flex;gap:6px;align-items:center">场景 <select id="modeSel" class="psel"><option value="exam">考试（显示 exam_item_id）</option><option value="homework">作业（显示姓名）</option></select></label>
-      <span>审核开关在“设置智能批改”旁边，作用于当前题；审核不使用快捷键，均通过按钮操作</span>
+      <span>审核开关在“设置智能批改”旁边，作用于全部题，默认关闭，仅前端有效、不记录，刷新页面恢复关闭；审核不使用快捷键，均通过按钮操作</span>
     </div>
 
     <div class="top">
       <div class="hero">
         <div class="t"><span class="ico">▤</span>智能批改</div>
-        <div class="hr"><span class="rvsw isnew" title="开启后当前题进入审核模式；考试默认开启，作业默认关闭">审核模式 <button class="sw" id="reviewSw" role="switch" aria-checked="true" aria-label="当前题审核模式"></button></span><button class="btn">设置智能批改</button></div>
+        <div class="hr"><span class="rvsw isnew" title="开启后全部题进入审核模式；考试和作业默认都关闭，仅前端有效，不做任何状态记录，刷新页面恢复关闭">审核模式 <button class="sw" id="reviewSw" role="switch" aria-checked="false" aria-label="审核模式（全部题）"></button></span><button class="btn">设置智能批改</button></div>
       </div>
       <div class="filters">
         <div class="frow"><span class="lb">班级</span></div>
@@ -247,6 +247,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
           <span class="finish">批改完成 ⌄ <button class="refresh" data-act="refresh">↻ 刷新</button></span>
           <span class="rv isnew" id="rv"></span>
           <span class="rg isnew" id="rg" role="group" aria-label="审核筛选"></span>
+          <span class="isnew" id="sortHint" style="font-size:12px;color:var(--muted)">按出分时间倒序</span>
         </div>
         <div class="trt" id="trt"></div>
       </div>
@@ -270,12 +271,13 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   <h2>智能批改审核：基本设计</h2>
   <p class="muted">原型数据为模拟数据，学生姓名随机生成：第 13 题（配平题，4 小问各 4 分，满分 16），72 名学生，其中少量 AI 判分有误。每页 12 份，便于演示翻页（线上默认每页 100 份）。</p>
   <div>
-    <h3>本轮决策（2026-11-03）</h3>
+    <h3>本轮决策（2026-11-03，11-05 更新）</h3>
     <ul>
-      <li>审核开关放在页头“设置智能批改”按钮旁边（不放进设置向导里），作用于当前题：开启后当前题进入审核模式；考试默认开、作业默认关。</li>
+      <li>审核开关放在页头“设置智能批改”按钮旁边（不放进设置向导里），作用于全部题。考试和作业默认都是关，只在前端有效，不做任何状态记录（不入库、不记住，刷新页面恢复关闭）。</li>
       <li>不新增“批量审核”模式：审核模式下，现有“批量打分”的底部条增加“标记已审核 / 设为待审核”。</li>
-      <li>排序全部由服务端完成（置信度低在前），前端不再排序；卡片不显示低置信标签。</li>
-      <li>“已修正”不单独存储，由老师当前分与 AI 原始分比较得出。</li>
+      <li>审核模式下列表按出分时间倒序（最新在前），由服务端排序，前端不再排序；不再按置信度排序，卡片不显示低置信标签。</li>
+      <li>“已修正”自动记为已审核：老师改分的同时把该卷子置为已审核；卡片上的“已修正 16→12”只是展示标签（当前分与 AI 原始分比较得出），不是独立状态。</li>
+      <li>不提供批量撤销：单张点“✓ 已审”撤回；整页点底部“取消当前页审核结果”（原“本页已审完”提示改为该按钮），本页已审核的卷子退回待审核，分数不回滚。</li>
       <li>审核模式下单张改分不刷新列表、不再弹“保存成功”；确认时分数已变化的卷子静默跳过。</li>
       <li>题号右侧在审核完成后显示绿色小圆点（未审完不显示），分题审核进度和 AI 判分一致率放进“进度总览”。</li>
       <li>单份可标“疑”（存疑）：暂不确定先跳过，离开待审核列表，进“存疑”筛选，后面再审；存疑未清完不算审完（题号不亮绿点）。</li>
@@ -301,8 +303,8 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <ul>
       <li>默认视图是<b>待审核</b>。确认一页，这页的卡片离开视图，下一批自动补上；剩余数清零就是审完。老师不需要记住页码。</li>
       <li><b>只处理例外</b>：看到判错的直接改分，改分即视为已审（已修正）；其余的用一次“确认本页其余 N 份”放行。一页的成本 = 改错的几张 + 1 次点击。</li>
-      <li><b>风险优先</b>：审核模式下由服务端按置信度从低到高排序（现在前端只在页内排序，且考试接口不返回置信度，实际不生效），老师先看到最可能判错的卷子。</li>
-      <li><b>任何批量操作都可撤销</b>（底部提示条 8 秒内“撤销”），因此批量按钮不需要二次确认弹窗；只有整组确认（可能几百份）用一个轻量内联确认。</li>
+      <li><b>时间倒序</b>：审核模式下由服务端按出分时间从新到旧排序，老师先审最新出分的卷子；不再按置信度排序（现在前端只在页内排序，且考试接口不返回置信度，实际不生效）。</li>
+      <li>批量按钮不弹二次确认；只有整组确认（可能几百份）用一个轻量内联确认。</li>
     </ul>
   </div>
 
@@ -310,10 +312,10 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <h3>3. 状态模型</h3>
     <div class="tbl"><table>
       <tr><th>状态</th><th>来源</th><th>如何进入</th><th>如何离开</th></tr>
-      <tr><td>待审核</td><td>存储 review_status = 0</td><td>智能批改出分；AI 重新批改且分数变化；取消存疑</td><td>单张确认 / 批量标记 / 确认本页 / 整组确认 / 改分</td></tr>
-      <tr><td>已审核</td><td>存储 review_status = 1</td><td>上述确认操作；存疑后再确认</td><td>点“✓ 已审”撤回；撤销；AI 重批且分数变化</td></tr>
-      <tr><td>存疑</td><td>存储 review_status = 2</td><td>卡片悬停“疑”；详情“标记存疑，下一份”</td><td>确认（→已审核）；改分（→已修正）；点“疑”标签取消（→待审核）。不参与确认本页和整组确认</td></tr>
-      <tr><td>已修正</td><td><b>推导</b>：老师当前分 ≠ AI 原始分</td><td>任何老师改分（卡片步进、详情弹窗、批量打分、整组改分）</td><td>再次改回 AI 原始分（此时视为已审核）</td></tr>
+      <tr><td>待审核</td><td>存储 review_status = 0</td><td>智能批改出分；AI 重新批改且分数变化；取消存疑；撤回已审；取消当前页审核结果</td><td>单张确认 / 批量标记 / 确认本页 / 整组确认 / 改分</td></tr>
+      <tr><td>已审核</td><td>存储 review_status = 1</td><td>上述确认操作；存疑后再确认；<b>老师改分（自动记为已审核）</b></td><td>点“✓ 已审”撤回；取消当前页审核结果；AI 重批且分数变化</td></tr>
+      <tr><td>存疑</td><td>存储 review_status = 2</td><td>卡片悬停“疑”；详情“标记存疑，下一份”</td><td>确认（→已审核）；改分（→已审核）；点“疑”标签取消（→待审核）。不参与确认本页和整组确认</td></tr>
+      <tr><td>已修正（展示标签，非独立状态）</td><td><b>推导</b>：老师当前分 ≠ AI 原始分；此时状态同为已审核</td><td>任何老师改分（卡片步进、详情弹窗、批量打分、整组改分）</td><td>改回 AI 原始分后标签消失，仍是已审核；取消审核结果后退回待审核，标签随分数保留</td></tr>
     </table></div>
     <p class="muted">已核实：页面显示的分数是 <code>t_paper_mark_record.read_score</code>（<code>teacher_id = -2</code>，老师改分也写这一条）；AI 原始分保存在 <code>t_exam_item_intelligence.finally_score</code>，老师改分不会覆盖它。intellijmarkserv 的“人工校正分析”也是用这两个分数比较。不在审核范围：AI 未出分、已退回人工（intelligence_status = 5）。</p>
   </div>
@@ -323,34 +325,34 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <div class="tbl"><table>
       <tr><th>场景</th><th>操作</th><th>成本</th></tr>
       <tr><td>一页都对</td><td>底部审核条“确认本页 N 份无误”</td><td>1 次</td></tr>
-      <tr><td>一页有 2 张错</td><td>用卡片现有的分数步进器改这 2 张（自动记为已修正），再确认本页其余</td><td>改分 + 1 次</td></tr>
+      <tr><td>一页有 2 张错</td><td>用卡片现有的分数步进器改这 2 张（自动记为已审核，带“已修正”标签），再确认本页其余</td><td>改分 + 1 次</td></tr>
       <tr><td>单张</td><td>悬停卡片，点右上角“✓ 确认”；已审的点“✓ 已审”标签可撤回</td><td>1 次</td></tr>
       <tr><td>挑一批确认</td><td>点“批量打分”进入现有批量模式（当前页/全部勾选），审核模式下底部条多出“标记已审核”</td><td>勾选 + 1 次</td></tr>
       <tr><td>满分组/一致答案组</td><td>左侧分组 ⋮ → 确认本组待审核（菜单内二次确认）</td><td>3 次</td></tr>
       <tr><td>可疑件细看</td><td>点图片打开现有“学生作答详情”，右侧新增审核区：“通过并下一份”跳到下一份待审，← → 翻看（现有），改分即修正</td><td>每份 1 次</td></tr>
       <tr><td>拿不准，先跳过</td><td>悬停卡片点“疑”，或详情里“标记存疑，下一份”；之后在“存疑”筛选里集中处理（可请同事一起看）</td><td>1 次</td></tr>
-      <tr><td>批量打分</td><td>沿用现有批量打分；被改到的卷子一律记为已修正</td><td>不变</td></tr>
-      <tr><td>接着昨天继续</td><td>打开即是待审核视图；审完的题号右侧有绿点，“进度总览”看每题剩余</td><td>0</td></tr>
+      <tr><td>整页重审</td><td>底部“取消当前页审核结果”：本页已审核的卷子退回待审核（分数不回滚），可重新审</td><td>1 次</td></tr>
+      <tr><td>批量打分</td><td>沿用现有批量打分；被改分的卷子自动记为已审核（带“已修正”标签）</td><td>不变</td></tr>
+      <tr><td>接着昨天继续</td><td>开关刷新后恢复关闭，需重新打开审核模式；打开即是待审核视图，审完的题号右侧有绿点，“进度总览”看每题剩余</td><td>0</td></tr>
     </table></div>
   </div>
 
   <div>
     <h3>5. 与现有页面的融合（fat-web <code>views/exam/intelligence-read/list/index.vue</code>）</h3>
-    <p>原则：复用现有页面与交互，审核能力做成独立组件和 mixin 接入，<code>index.vue</code> 只改接入点；“本题需要审核”关闭或后端未上线时，新组件全部不渲染，页面与现在一致。原型中虚线框标出的就是新增部分。</p>
+    <p>原则：复用现有页面与交互，审核能力做成独立组件和 mixin 接入，<code>index.vue</code> 只改接入点；审核模式关闭或后端未上线时，新组件全部不渲染，页面与现在一致。原型中虚线框标出的就是新增部分。</p>
     <div class="tbl"><table>
       <tr><th>位置</th><th>现有</th><th>新增 / 改动</th><th>实现</th></tr>
       <tr><td>题号筛选 <code>dn-filter-item-v2</code> 自定义 slot</td><td>填空题/解答题/作文分组的题号</td><td>本题审核完成后，题号右侧显示绿色小圆点；未审完不显示</td><td>题号列表接口返回每题是否已审完</td></tr>
-      <tr><td>页头 <code>filter-top-beijin</code></td><td>“智能批改”标题、“设置智能批改”按钮</td><td>按钮左侧“审核模式”开关，作用于当前题</td><td>按 paperReadId 读写 <code>t_paper_read_extension.review_required</code>；切换后重新拉取当前题列表；不改 <code>set-ai-read.vue</code>；可见范围沿用“设置智能批改”按钮，是否限制普通阅卷老师切换待确认</td></tr>
+      <tr><td>页头 <code>filter-top-beijin</code></td><td>“智能批改”标题、“设置智能批改”按钮</td><td>按钮左侧“审核模式”开关，作用于全部题；考试、作业默认都关</td><td>纯前端状态（页面 data），不读写后端、不入库、不存本地缓存，刷新恢复关闭；开启后列表请求才带 <code>reviewStatus</code> 和时间倒序排序参数，切换后重新拉取当前题列表；不改 <code>set-ai-read.vue</code></td></tr>
       <tr><td>进度总览弹窗 <code>openProgressModal</code></td><td>各题批改进度</td><td>增加“审核进度”“AI 判分一致率”两列</td><td>进度接口增加每题已审、改分、待审数</td></tr>
-      <tr><td>吸顶工具条左侧</td><td>批改完成 ⌄、剩余人工批改数、刷新</td><td>审核进度条 + 待审核/存疑/已审核/全部 筛选</td><td>新组件 <code>review-progress</code>；筛选值作为 <code>getListResultDetail</code> 的 <code>reviewStatus</code> 参数</td></tr>
+      <tr><td>吸顶工具条左侧</td><td>批改完成 ⌄、剩余人工批改数、刷新</td><td>审核进度条 + 待审核/存疑/已审核/全部 筛选 + “按出分时间倒序”提示</td><td>新组件 <code>review-progress</code>；筛选值作为 <code>getListResultDetail</code> 的 <code>reviewStatus</code> 参数；审核模式下排序参数传时间倒序</td></tr>
       <tr><td>吸顶工具条右侧</td><td>查看答案、批量设为人工、批量打分</td><td>不变（不新增“批量审核”）</td><td>—</td></tr>
       <tr><td>左侧分组树 <code>group-tree</code></td><td>分数/识别结果分组、N份、⋮（将分数调整为、设为人工阅卷）</td><td>不显示进度；本组审核完成（无待审核、无存疑）后分数右侧显示绿色小圆点；⋮ 增加“确认本组待审核”（菜单内确认）</td><td><code>listAiResult</code> 分组返回是否审完及 <code>pendingCount</code>（整组确认用）；<code>handleBatchAction</code> 增加 <code>reviewGroup</code> 命令</td></tr>
-      <tr><td>卡片 <code>box-item-v2</code></td><td>作答图（点击看详情）、作业显示姓名（考试不显示）、待人工标签、分数步进器</td><td>悬停“疑”“✓ 确认”；标签区“✓ 已审 / 疑 / 已修正 16→12 / 已移至 N 分组”；考试显示 exam_item_id（11px 等宽字体）</td><td>新组件 <code>review-status-tag</code>；身份显示沿用 <code>scenarioMode</code>，考试取 <code>examResultItemId</code>；<code>adjustScore</code>/<code>inputChange</code> 保存成功后只更新本卡片</td></tr>
-      <tr><td>底部 <code>batch-score-bar</code></td><td>批量模式下的当前页/全部勾选与批量动作</td><td>非批量模式：审核条（确认本页其余 N 份）；批量打分模式：增加“设为待审核 / 标记已审核”</td><td>新组件 <code>review-dock</code>；<code>batch-score-bar</code> 在 <code>batchType = 1</code> 且审核模式时多两个按钮</td></tr>
+      <tr><td>卡片 <code>box-item-v2</code></td><td>作答图（点击看详情）、作业显示姓名（考试不显示）、待人工标签、分数步进器</td><td>悬停“疑”“✓ 确认”；标签区“✓ 已审 / 疑 / 已修正 16→12（已自动记为已审核）/ 已移至 N 分组”；考试显示 exam_item_id（11px 等宽字体）</td><td>新组件 <code>review-status-tag</code>；身份显示沿用 <code>scenarioMode</code>，考试取 <code>examResultItemId</code>；<code>adjustScore</code>/<code>inputChange</code> 保存成功后只更新本卡片</td></tr>
+      <tr><td>底部 <code>batch-score-bar</code></td><td>批量模式下的当前页/全部勾选与批量动作</td><td>非批量模式：审核条（确认本页其余 N 份；本页没有待审时，原“本页已审完”改为“取消当前页审核结果”按钮）；批量打分模式：增加“设为待审核 / 标记已审核”</td><td>新组件 <code>review-dock</code>；<code>batch-score-bar</code> 在 <code>batchType = 1</code> 且审核模式时多两个按钮</td></tr>
       <tr><td>学生作答详情 <code>dn-modal</code>（80vw）</td><td>左：作答图+识别结果；右：得分修改、评分理由；外侧左右箭头</td><td>右侧新增审核区：状态、“通过并下一份”按钮</td><td>扩展现有弹窗；本期不加快捷键</td></tr>
       <tr><td>分页 <code>dn-el-pagination</code></td><td>每页默认 100 条</td><td>每页条数可选 20 / 40 / 80 / 100</td><td>传入 <code>page-sizes</code>；切换后清空本页快照</td></tr>
-      <tr><td>改分保存 <code>setSubmitItems</code></td><td>每次保存弹“保存成功”，并刷新分组和当前页</td><td>审核模式下不弹“保存成功”、不刷新列表，只更新卡片和计数；失败才提示</td><td>按审核开关分支，关闭时保持现状</td></tr>
-      <tr><td>顶部消息</td><td>Element 消息提示</td><td>确认类操作提示带“撤销”</td><td>8 秒内撤销，回写原状态</td></tr>
+      <tr><td>改分保存 <code>setSubmitItems</code></td><td>每次保存弹“保存成功”，并刷新分组和当前页</td><td>审核模式下不弹“保存成功”、不刷新列表，只更新卡片和计数；失败才提示；改分同时自动记为已审核</td><td>按审核开关分支，关闭时保持现状</td></tr>
     </table></div>
     <p class="muted">注意：现有页面中“点图片”是打开详情，勾选只在批量模式出现。原型据此调整，不再用点图片勾选。作文题走另一套表格/详情布局，审核入口需单独适配。</p>
   </div>
@@ -363,7 +365,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li><b>确认按快照提交</b>：“确认本页”提交快照中的 <code>examItemId + seenScore</code>，不提交当前列表。服务端只确认仍为待审核、且分数没变的行；别的老师刚改过或 AI 重批过的会被跳过，前端提示“已确认 10 份，2 份分数已变化未确认”，并保留在待审核中。</li>
       <li><b>翻页不漏看</b>：审核默认用“待审核”筛选。确认过的卷子离开结果集，确认后总是重新取第 1 页，就是下一批，不依赖页码偏移。“全部/已审核/存疑”视图下确认本页后留在当前页刷新，不自动翻页。</li>
       <li><b>详情弹窗</b>：上一份/下一份基于打开弹窗时的快照列表，弹窗打开期间不因改分重排。</li>
-      <li><b>影响面</b>：只在“本题需要审核”开启时改变刷新时机；关闭时保持现有 <code>setSubmitItems</code> 刷新逻辑。批量打分、整组改分、设为人工本来就作用于整组，仍按现有逻辑刷新，同时清空快照。</li>
+      <li><b>影响面</b>：只在审核模式开启时改变刷新时机；关闭时保持现有 <code>setSubmitItems</code> 刷新逻辑。批量打分、整组改分、设为人工本来就作用于整组，仍按现有逻辑刷新，同时清空快照。</li>
     </ol>
     <p class="muted">原型已按此实现：在 16 分组里改分，卡片留在原位并提示已移组；左侧计数立即变化；点“确认本页”只确认这页剩下的；点工具条“刷新”才重新取这一页。</p>
   </div>
@@ -372,8 +374,8 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     <h3>6. 不需要审核的场景</h3>
     <ul>
       <li><b>审核不卡任何流程</b>：不阻断阅卷完成、出成绩、发布报告。它是老师的工作进度工具，不是质量门禁。</li>
-      <li><b>审核开关在“设置智能批改”旁边</b>（按阅卷任务即按题存储，切题时跟着显示该题的状态）：关闭时页面与现在一致；改分仍可推导出已修正，以后再打开审核时数据连续。</li>
-      <li><b>默认值</b>：考试默认开启；作业/练习默认关闭（老师可打开）。避免给低利害场景增加视觉负担和“没审完”的心理负担。</li>
+      <li><b>审核开关在“设置智能批改”旁边</b>，作用于全部题，仅前端有效、不做任何状态记录：关闭时页面与现在一致；改分仍会写入已审核状态，以后再打开审核时数据连续。</li>
+      <li><b>默认值</b>：考试和作业都默认关闭，刷新页面后恢复关闭，老师需要时自己打开。避免给不需要的场景增加视觉负担和“没审完”的心理负担。</li>
       <li><b>不做“滚动看过即视为已审”</b>：隐式规则不可靠，老师也无法分辨哪些是自己真确认过的。显式的“确认本页”只多 1 次点击，状态可信。</li>
       <li><b>高置信自动免审暂不做</b>：置信度目前未在列表接口全部回填，且一旦误放行责任不清。等有审核数据后，可评估“高置信组抽检 N 份后整组放行”。</li>
     </ul>
@@ -381,25 +383,20 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
 
   <div>
     <h3>7. 后端方案（marking 为主，fat-service 承载迁移）</h3>
-    <p><b>存储</b>：<code>exam.t_exam_item_intelligence</code> 增加审核字段（每个 examItem × paperRead 一行，正好是审核粒度）；<code>t_paper_read_extension</code> 增加审核开关。“已修正”不存，由 <code>t_paper_mark_record(teacher_id = -2).read_score</code> 与 <code>t_exam_item_intelligence.finally_score</code> 比较得出。</p>
+    <p><b>存储</b>：<code>exam.t_exam_item_intelligence</code> 增加审核字段（每个 examItem × paperRead 一行，正好是审核粒度）；开关只在前端，不建字段。老师改分时同一事务把该行置为已审核；“已修正”标签不存，由 <code>t_paper_mark_record(teacher_id = -2).read_score</code> 与 <code>t_exam_item_intelligence.finally_score</code> 比较得出。</p>
 <pre>ALTER TABLE t_exam_item_intelligence
-  ADD COLUMN review_status TINYINT NOT NULL DEFAULT 0 COMMENT '审核状态 0待审核 1已审核 2存疑（已修正由分数比较推导，优先于存疑）',
+  ADD COLUMN review_status TINYINT NOT NULL DEFAULT 0 COMMENT '审核状态 0待审核 1已审核 2存疑（改分自动置1；已修正标签由分数比较推导）',
   ADD COLUMN reviewer_id BIGINT NOT NULL DEFAULT 0 COMMENT '审核人ID',
   ADD COLUMN reviewer_name VARCHAR(64) NOT NULL DEFAULT '' COMMENT '审核人',
   ADD COLUMN review_date_time DATETIME NULL COMMENT '审核时间';
--- 是否需要 (paper_read_id, review_status) 索引，按现有 V20260416.002 索引和 explain 决定
-
-ALTER TABLE t_paper_read_extension
-  ADD COLUMN review_required TINYINT NOT NULL DEFAULT 0 COMMENT '智能批改结果是否需要老师审核 0否 1是';
--- 考试默认开、作业默认关：在初始化智能批改时按考试类型写入，不靠列默认值</pre>
-    <p class="muted">迁移放 fat-service <code>db/migration/exam/2026/</code>，命名 <code>V20261103.1.506__add_intelligence_review_status.sql</code>（实施当天日期）。需评估表量级与 MySQL 5.7 加列锁表时间；TiDB 为在线 DDL。旧版本服务不读不写新列，可先发迁移再发代码。</p>
+-- 是否需要 (paper_read_id, review_status) 索引，按现有 V20260416.002 索引和 explain 决定</pre>
+    <p class="muted">迁移放 fat-service <code>db/migration/exam/2026/</code>，命名 <code>V20261105.1.506__add_intelligence_review_status.sql</code>（实施当天日期）。需评估表量级与 MySQL 5.7 加列锁表时间；TiDB 为在线 DDL。旧版本服务不读不写新列，可先发迁移再发代码。</p>
     <p><b>接口</b>（考试 <code>/exam/intelligence/*</code> 与作业 <code>/exam/studyGuideIntelli/*</code> 两套都要加）：</p>
     <ul>
-      <li><code>POST …/review</code> <code>{paperReadId, items: [{examItemId, seenScore}], reviewStatus: 0|1|2}</code>：按卷子设置。确认（1）时只更新属于该 paperRead、review_status 为 0 或 2、且当前 finallyScore 等于 seenScore 的行；其余静默跳过（前端不做特殊提示，跳过的仍是待审核）。撤回（0）和存疑（2）不比较分数；“确认本页”只提交待审核的卷子，不含存疑。幂等。</li>
+      <li><code>POST …/review</code> <code>{paperReadId, items: [{examItemId, seenScore}], reviewStatus: 0|1|2}</code>：按卷子设置。确认（1）时只更新属于该 paperRead、review_status 为 0 或 2、且当前 finallyScore 等于 seenScore 的行；其余静默跳过（前端不做特殊提示，跳过的仍是待审核）。撤回（0，含“取消当前页审核结果”）和存疑（2）不比较分数；“确认本页”只提交待审核的卷子，不含存疑。幂等。</li>
       <li><code>POST …/reviewGroup</code> <code>{paperReadId, readScore | ocrText, expectedCount}</code>：整组确认。服务端统计该组待审数（不含存疑），与 expectedCount 不一致则拒绝并返回最新数量（防止期间新批改出来的卷子被一并放行）。</li>
-      <li>撤销：前端记住本次操作的 ID 与原状态，调用 review 回写为 0。</li>
-      <li><code>listAiDetail</code>（<code>pageAiItemByFilter</code>）增加 <code>reviewStatus</code> 筛选参数（待审核 / 存疑 / 已审核含已修正）；审核模式下排序改为 <code>teii.confidence, teii.exam_item_id</code>（现为 <code>order by teii.exam_item_id</code>），前端不再排序；返回 <code>reviewStatus / reviewerName / reviewDateTime / aiScore</code>；<code>listAiResult</code> 分组结果增加 <code>pendingCount</code>；题号列表接口增加每题待审数。</li>
-      <li>老师改分沿用现有 <code>submitItems</code>，不需要额外写审核状态（已修正靠推导）。注意现有逻辑改分时会清空 <code>llm_comment</code>，改过分的卷子在详情里看不到 AI 评分理由。AI 重新批改且分数变化时，把 review_status 重置为 0。</li>
+      <li><code>listAiDetail</code>（<code>pageAiItemByFilter</code>）增加 <code>reviewStatus</code> 筛选参数（待审核 / 存疑 / 已审核含已修正）；前端在审核模式下传时间倒序参数（开关不入库，后端不感知），排序改为出分时间倒序加 <code>teii.exam_item_id desc</code>（现为 <code>order by teii.exam_item_id</code>；不传参数时保持现状），前端不再排序；返回 <code>reviewStatus / reviewerName / reviewDateTime / aiScore</code>；<code>listAiResult</code> 分组结果增加 <code>pendingCount</code>；题号列表接口增加每题待审数。</li>
+      <li>老师改分沿用现有 <code>submitItems</code>，在同一事务里把被改分的行置为 <code>review_status = 1</code>（审核人取当前登录用户），不依赖前端开关，因此关闭审核模式期间的改分也算已审；“已修正”标签靠分数比较推导。注意现有逻辑改分时会清空 <code>llm_comment</code>，改过分的卷子在详情里看不到 AI 评分理由。AI 重新批改且分数变化时，把 review_status 重置为 0。</li>
     </ul>
     <p><b>多人协作</b>：状态挂在卷子上而不是老师上，谁确认都算；卡片悬停显示审核人和时间。并发确认同一批是幂等的。</p>
   </div>
@@ -409,6 +406,7 @@ ALTER TABLE t_paper_read_extension
     <ul>
       <li>已核实：AI 原始分在 <code>t_exam_item_intelligence.finally_score</code>，老师改分写 <code>teacher_id = -2</code> 的阅卷记录，二者可比较得出已修正。</li>
       <li>已核实：列表默认每页 100 份；低置信排序只在前端页内做，考试接口不返回置信度；服务端按 <code>exam_item_id</code> 排序。</li>
+      <li>待核实：“出分时间”取哪个字段（<code>t_exam_item_intelligence</code> 的创建/更新时间，或阅卷记录时间），AI 重批会不会刷新它。</li>
       <li>待核实：AI 重新批改（<code>reCorrectManualIntelligence</code> 等）是否会覆盖老师改过的分数。</li>
       <li>待核实：作业 <code>studyGuideIntelli/submitItems</code> 以 AI 老师身份提交，审核人需取当前登录用户，而不是提交记录上的老师。</li>
     </ul>
@@ -417,9 +415,9 @@ ALTER TABLE t_paper_read_extension
   <div>
     <h3>9. 分期</h3>
     <ol>
-      <li><b>P1</b>：设置里的审核开关 + 审核状态 + 单张/批量/本页/整组确认 + 已修正推导 + 待审筛选 + 服务端风险排序 + 本页快照与改分不刷新 + 进度条与进度总览（含 AI 判分一致率）+ 撤销。</li>
+      <li><b>P1</b>：页头审核开关（仅前端）+ 审核状态 + 单张/批量/本页/整组确认 + 取消当前页审核结果 + 改分自动已审核（带已修正标签）+ 待审筛选 + 服务端出分时间倒序 + 本页快照与改分不刷新 + 进度条与进度总览（含 AI 判分一致率）。</li>
       <li><b>P2</b>：作文题审核（单独设计）；详情弹窗快捷键；悬停看评分理由；OCR 一致答案组整组确认。</li>
-      <li><b>P3</b>：抽检模式；按小问结构化判分；根据审核数据调整排序。</li>
+      <li><b>P3</b>：抽检模式；按小问结构化判分；按置信度风险排序（需列表接口回填置信度）；根据审核数据调整排序。</li>
     </ol>
   </div>
 </template>
@@ -449,21 +447,22 @@ ALTER TABLE t_paper_read_extension
       var truth = right * 4, ai = truth, conf = 0.82 + rnd()*0.17;
       if (rnd() < 0.10) { ai = truth === 16 ? 12 : Math.min(16, truth + 4); conf = 0.45 + rnd()*0.3; }
       else if (rnd() < 0.06) conf = 0.5 + rnd()*0.2;
-      arr.push({id: qn*1000 + i, eid: String(2019137064000000 + qn * 10000 + i * 37), name: name, ans: ans, ai: ai, score: ai, group: ai, conf: conf, low: conf < 0.75, st: "pending", rot: (rnd()*6-3).toFixed(1)});
+      arr.push({id: qn*1000 + i, eid: String(2019137064000000 + qn * 10000 + i * 37), name: name, ans: ans, ai: ai, score: ai, group: ai, conf: conf, low: conf < 0.75, st: "pending", rot: (rnd()*6-3).toFixed(1), at: 540 + (i * 37 + qn * 11) % 300});
     }
     return arr;
   }
   var Q = {13: makeStudents(72, 13), 14: makeStudents(72, 14), 15: makeStudents(72, 15)};
   Q[14].slice(0, 40).forEach(function(s){ s.st = "reviewed"; });
   var MAX = 16, PAGE = 20;
-  var S = {qn: 13, filter: "pending", group: "all", page: 1, batch: 0, sel: {}, selAll: false, menu: null, menuConfirm: false, on: {13:true,14:true,15:true}, mode: "exam", detail: null, undo: null, view: null};
+  var S = {qn: 13, filter: "pending", group: "all", page: 1, batch: 0, sel: {}, selAll: false, menu: null, menuConfirm: false, reviewOn: false, mode: "exam", detail: null, view: null};
 
   var $ = function(id){ return document.getElementById(id); };
   function esc(t){ return String(t).replace(/[&<>"]/g, function(c){ return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]; }); }
   function items(){ return Q[S.qn]; }
-  function on(){ return S.on[S.qn]; }
-  // 已修正 > 存疑 > 已审核/待审核：改过分即视为已审，存疑与待审核都算未审完
-  function stats(list){ var r=0,c=0,d=0; list.forEach(function(s){ if (s.st==="reviewed") r++; else if (s.st==="corrected") c++; else if (s.st==="doubt") d++; }); return {total:list.length, reviewed:r, corrected:c, doubt:d, pending:list.length-r-c-d, left:list.length-r-c}; }
+  function on(){ return S.reviewOn; }
+  function fmtAt(m){ return "今天 " + ("0" + Math.floor(m/60)).slice(-2) + ":" + ("0" + m % 60).slice(-2); }
+  // 改分自动记为已审核；“已修正”只是已审核里分数 ≠ AI 原始分的展示标签，不是独立状态。存疑与待审核都算未审完
+  function stats(list){ var r=0,c=0,d=0; list.forEach(function(s){ if (s.st==="reviewed") { if (s.score!==s.ai) c++; else r++; } else if (s.st==="doubt") d++; }); return {total:list.length, reviewed:r, corrected:c, doubt:d, pending:list.length-r-c-d, left:list.length-r-c}; }
   function who(s){ return S.mode === "homework" ? '<span class="nm">' + esc(s.name) + '</span>' : '<span class="eid" title="exam_item_id">' + s.eid + '</span>'; }
   function whoText(s){ return S.mode === "homework" ? s.eid + '(' + s.name + ')' : s.eid; }
   function filtered(){
@@ -472,9 +471,9 @@ ALTER TABLE t_paper_read_extension
       if (S.group !== "all" && s.group !== S.group) return false;
       if (f === "pending") return s.st === "pending";
       if (f === "doubt") return s.st === "doubt";
-      if (f === "done") return s.st === "reviewed" || s.st === "corrected";
+      if (f === "done") return s.st === "reviewed";
       return true;
-    }).sort(function(a,b){ return (a.conf - b.conf) || (a.id - b.id); }); // 模拟服务端排序（置信度低在前），前端不再排序
+    }).sort(function(a,b){ return on() ? (b.at - a.at) || (b.id - a.id) : a.id - b.id; }); // 模拟服务端排序：审核模式按出分时间倒序，关闭时保持现有顺序，前端不再排序
   }
   // 本页快照：进入一页时记下卷子 ID 和看到的分数；改分只更新卡片，翻页/切组/确认本页/刷新时才重新取
   function pageItems(){
@@ -496,24 +495,24 @@ ALTER TABLE t_paper_read_extension
     return h;
   }
   function reviewTag(s){
-    var moved = S.group !== "all" && s.group !== S.group ? '<span class="tag isnew" style="background:#f4f4f5;color:var(--muted)" title="已移出本组，刷新或翻页后不再显示">已移至 ' + s.group + ' 分组</span>' : '';
-    if (s.st === "corrected") return '<span class="tag cor isnew" title="老师改过分数，视为已审">已修正 ' + s.ai + '→' + s.score + '</span>' + moved;
     if (!on()) return '';
-    if (s.st === "reviewed") return '<button class="tag rev isnew" data-act="unreview" data-id="' + s.id + '" title="张老师 · 刚刚审核；点击撤回为待审">✓ 已审</button>';
-    if (s.st === "doubt") return '<button class="tag doubt isnew" data-act="unreview" data-id="' + s.id + '" title="暂不确定，先跳过；点击取消存疑">疑</button>';
-    return '';
+    var moved = S.group !== "all" && s.group !== S.group ? '<span class="tag isnew" style="background:#f4f4f5;color:var(--muted)" title="已移出本组，刷新或翻页后不再显示">已移至 ' + s.group + ' 分组</span>' : '';
+    var cor = s.score !== s.ai ? '<span class="tag cor isnew" title="老师改过分数，已自动记为已审核">已修正 ' + s.ai + '→' + s.score + '</span>' : '';
+    if (s.st === "reviewed") return (cor || '<button class="tag rev isnew" data-act="unreview" data-id="' + s.id + '" title="张老师 · 刚刚审核；点击撤回为待审">✓ 已审</button>') + moved;
+    if (s.st === "doubt") return '<button class="tag doubt isnew" data-act="unreview" data-id="' + s.id + '" title="暂不确定，先跳过；点击取消存疑">疑</button>' + moved;
+    return cor + moved;
   }
 
   function render(){
     $("reviewSw").setAttribute("aria-checked", on());
     $("qnList").innerHTML = [13,14,15].map(function(q){
       var st = stats(Q[q]);
-      var dot = S.on[q] && !st.left ? '<span class="dot" title="本题已审核完成"></span>' : '';
+      var dot = on() && !st.left ? '<span class="dot" title="本题已审核完成"></span>' : '';
       return '<button class="qopt' + (q === S.qn ? ' on' : '') + '" data-act="qn" data-q="' + q + '">' + q + dot + '</button>';
     }).join("");
 
     var st = stats(items());
-    $("rv").hidden = $("rg").hidden = !on();
+    $("rv").hidden = $("rg").hidden = $("sortHint").hidden = !on();
     if (on()) {
       $("rv").innerHTML = '审核 <span class="bar"><i class="r" style="width:' + (st.reviewed/st.total*100) + '%"></i><i class="c" style="width:' + (st.corrected/st.total*100) + '%"></i></span><b>' + (st.reviewed+st.corrected) + '</b>/' + st.total + (st.reviewed + st.corrected ? '<span style="color:var(--muted)">· AI 判分一致率 ' + Math.round(st.reviewed / (st.reviewed + st.corrected) * 100) + '%</span>' : '');
       $("rg").innerHTML = [["pending","待审核 " + st.pending],["doubt","存疑 " + st.doubt],["done","已审核 " + (st.reviewed+st.corrected)],["all","全部"]].map(function(x){
@@ -549,7 +548,7 @@ ALTER TABLE t_paper_read_extension
     } else {
       $("grid").innerHTML = list.map(function(s){
         var sel = S.selAll || !!S.sel[s.id];
-        return '<div class="card' + (sel && S.batch ? ' sel' : '') + '" data-id="' + s.id + '">' +
+        return '<div class="card' + (sel && S.batch ? ' sel' : '') + '" data-id="' + s.id + '"' + (on() ? ' title="出分 ' + fmtAt(s.at) + '"' : '') + '>' +
           '<div class="img" data-act="' + (S.batch ? 'pick' : 'detail') + '" data-id="' + s.id + '">' + sheet(s) + '<span class="eye">👁 查看详情</span></div>' +
           (on() && !S.batch && (s.st === "pending" || s.st === "doubt") ? '<span class="qcs isnew">' + (s.st === "pending" ? '<button class="qc dq" data-act="doubt1" data-id="' + s.id + '" title="暂不确定，先跳过，后面再审">疑</button>' : '') + '<button class="qc" data-act="review1" data-id="' + s.id + '" title="确认这份判分无误">✓ 确认</button></span>' : '') +
           '<div class="tb"><div class="tags">' + (S.batch ? '<span class="ck" data-act="pick" data-id="' + s.id + '">' + (sel ? '✓' : '') + '</span>' : '') +
@@ -568,7 +567,7 @@ ALTER TABLE t_paper_read_extension
     if (S.detail && !S.modal) renderDetail();
   }
   function nextQn(){
-    var nq = [13,14,15].filter(function(q){ return q !== S.qn && S.on[q] && stats(Q[q]).pending; })[0];
+    var nq = [13,14,15].filter(function(q){ return q !== S.qn && stats(Q[q]).pending; })[0];
     return nq ? '<button class="ebtn primary" data-act="qn" data-q="' + nq + '">去第 ' + nq + ' 题（待审 ' + stats(Q[nq]).pending + '）</button>' : '';
   }
   function menu(k, gs){
@@ -577,7 +576,7 @@ ALTER TABLE t_paper_read_extension
     if (on()) {
       h += '<hr>';
       if (!S.menuConfirm) h += '<button class="it isnew" data-act="groupAsk" ' + (gs.pending ? '' : 'disabled style="opacity:.5"') + '>确认本组待审核（' + gs.pending + '份）</button>';
-      else h += '<div class="cf isnew"><span>将 ' + k + ' 分组 <b>' + gs.pending + '</b> 份待审核全部标为已审核。建议先抽看几份，可撤销。</span><div><button class="ebtn" data-act="menuClose">取消</button><button class="ebtn primary" data-act="groupConfirm" data-g="' + k + '">确认</button></div></div>';
+      else h += '<div class="cf isnew"><span>将 ' + k + ' 分组 <b>' + gs.pending + '</b> 份待审核全部标为已审核。建议先抽看几份。</span><div><button class="ebtn" data-act="menuClose">取消</button><button class="ebtn primary" data-act="groupConfirm" data-g="' + k + '">确认</button></div></div>';
     }
     return h + '</div>';
   }
@@ -599,27 +598,27 @@ ALTER TABLE t_paper_read_extension
     b.className = "bbar isnew";
     b.hidden = false;
     b.innerHTML = '<div class="l"><span>当前页 <b>' + list.length + '</b> 份：待审 <b>' + ps.pending + '</b> · 已审 ' + ps.reviewed + ' · 已修正 ' + ps.corrected + (ps.doubt ? ' · 存疑 ' + ps.doubt : '') + '</span><span style="color:var(--muted)">判错的直接改分；拿不准的标“疑”先跳过</span></div>' +
-      '<div class="rr">' + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '</button>' : '<span style="color:var(--ok)">✓ 本页已过完' + (ps.doubt ? '（存疑 ' + ps.doubt + ' 份留待后审）' : '') + '</span>') + '</div>';
+      '<div class="rr">' + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '</button>' : '<button class="ebtn" data-act="cancelPage"' + (ps.reviewed + ps.corrected ? '' : ' disabled') + ' title="把本页已审核的卷子退回待审核，分数不回滚">取消当前页审核结果</button>') + '</div>';
   }
   function selectedIds(){ return S.selAll ? filtered().map(function(s){ return s.id; }) : Object.keys(S.sel).map(Number); }
 
   function apply(list, st, msg){
-    var snap = list.filter(function(s){ return s.st !== "corrected" && s.st !== st; }).map(function(s){ return [s, s.st]; });
-    if (!snap.length) return;
-    snap.forEach(function(x){ x[0].st = st; });
-    S.undo = snap; toast(msg.replace("{n}", snap.length), true);
+    var ch = list.filter(function(s){ return s.st !== st; });
+    if (!ch.length) return;
+    ch.forEach(function(x){ x.st = st; });
+    toast(msg.replace("{n}", ch.length));
   }
   var tt = null;
-  function toast(msg, undo){
+  function toast(msg){
     var t = $("toast");
-    t.innerHTML = '<span>' + msg + '</span>' + (undo ? '<button data-act="undo">撤销</button>' : '');
+    t.innerHTML = '<span>' + msg + '</span>';
     t.hidden = false; clearTimeout(tt);
-    tt = setTimeout(function(){ t.hidden = true; S.undo = null; }, 8000);
+    tt = setTimeout(function(){ t.hidden = true; }, 4000);
   }
   function setScore(s, v){
     v = Math.max(0, Math.min(MAX, v));
     if (isNaN(v) || v === s.score) return;
-    s.score = v; s.group = v; s.st = v === s.ai ? "reviewed" : "corrected";
+    s.score = v; s.group = v; s.st = "reviewed"; // 改分自动记为已审核
   }
   function exitBatch(){ S.batch = 0; S.sel = {}; S.selAll = false; }
   function pageConfirm(){
@@ -646,12 +645,12 @@ ALTER TABLE t_paper_read_extension
     var l = S.detail.list, i = l.indexOf(s.id);
     // 跳到下一份待审核；没有则停在当前
     for (var j = i + 1; j < l.length; j++) { if (find(l[j]).st === "pending") { S.detail.id = l[j]; render(); return; } }
-    closeDetail(); toast("当前筛选下已没有待审核的卷子", false);
+    closeDetail(); toast("当前筛选下已没有待审核的卷子");
   }
   function renderDetail(){
     var s = find(S.detail.id), l = S.detail.list, i = l.indexOf(s.id);
     var reason = LINES.map(function(L, k){ var ok = s.ans[k].join() === L.k.join(); return '(' + (k+1) + ') ' + L.n + '：' + (ok ? '配平正确，得 4 分' : '系数有误，不得分'); }).join('<br>');
-    var stTxt = s.st === "doubt" ? '<span class="tag doubt">疑 · 暂不确定</span>' : s.st === "corrected" ? '<span class="tag cor">已修正 ' + s.ai + '→' + s.score + '</span>' : s.st === "reviewed" ? '<span class="tag rev">✓ 已审 · 张老师</span>' : '<span class="tag" style="background:#f4f4f5;color:var(--muted)">待审核</span>';
+    var stTxt = (s.st === "doubt" ? '<span class="tag doubt">疑 · 暂不确定</span>' : s.st === "reviewed" ? '<span class="tag rev">✓ 已审 · 张老师</span>' : '<span class="tag" style="background:#f4f4f5;color:var(--muted)">待审核</span>') + (s.score !== s.ai ? ' <span class="tag cor">已修正 ' + s.ai + '→' + s.score + '</span>' : '');
     $("mask").innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-label="学生作答详情" data-stop="1">' +
       '<button class="nav l" data-act="dprev" aria-label="上一份">‹</button><button class="nav r" data-act="dnext" aria-label="下一份">›</button>' +
       '<div class="mh"><span>' + esc(whoText(s)) + ' <span style="color:var(--muted);font-weight:400;font-size:13px">（' + (i+1) + '/' + l.length + '）</span></span><button data-act="dclose" aria-label="关闭">×</button></div>' +
@@ -660,7 +659,7 @@ ALTER TABLE t_paper_read_extension
       '<div class="vr"></div><div class="mr">' +
       '<div class="se"><span style="font-size:13px;color:var(--text2);font-weight:600">得分修改:</span><div class="row"><input id="dscore" type="number" min="0" max="' + MAX + '" step="1" value="' + s.score + '"><span>分 / 满分 ' + MAX + ' 分</span></div></div>' +
       (on() ? '<div class="rvbox isnew"><div class="row"><span>审核状态 ' + stTxt + '</span>' + '</div>' +
-        '<div class="row"><span style="color:var(--muted)">改分会自动记为已修正</span><span style="display:flex;gap:8px">' + (s.st === "pending" ? '<button class="ebtn" data-act="ddoubt">标记存疑，下一份</button>' : '') + '<button class="ebtn primary" data-act="dpass">' + (s.st === "pending" || s.st === "doubt" ? '通过并下一份' : '下一份待审') + '</button></span></div></div>' : '') +
+        '<div class="row"><span style="color:var(--muted)">改分会自动记为已审核（标注已修正）</span><span style="display:flex;gap:8px">' + (s.st === "pending" ? '<button class="ebtn" data-act="ddoubt">标记存疑，下一份</button>' : '') + '<button class="ebtn primary" data-act="dpass">' + (s.st === "pending" || s.st === "doubt" ? '通过并下一份' : '下一份待审') + '</button></span></div></div>' : '') +
       '<div class="sec" style="flex:1"><span>评分理由:</span><div class="box" style="background:#fff">' + reason + '</div><div style="font-size:12px;color:var(--muted);text-align:center">【内容由AI根据评分标准生成】</div></div>' +
       '</div></div></div>';
     var inp = $("dscore");
@@ -677,7 +676,7 @@ ALTER TABLE t_paper_read_extension
     var a = el.dataset.act, id = el.dataset.id, s;
     if (RESET_VIEW[a]) S.view = null;
     switch (a) {
-      case "qn": S.qn = Number(el.dataset.q); S.group = "all"; S.page = 1; exitBatch(); S.filter = S.on[S.qn] ? "pending" : "all"; break;
+      case "qn": S.qn = Number(el.dataset.q); S.group = "all"; S.page = 1; exitBatch(); S.filter = on() ? "pending" : "all"; break;
       case "filter": S.filter = el.dataset.f; S.page = 1; S.sel = {}; S.selAll = false; break;
       case "group": S.group = el.dataset.g === "all" ? "all" : Number(el.dataset.g); S.page = 1; S.sel = {}; S.selAll = false; break;
       case "menu": e.stopPropagation(); S.menuConfirm = false; S.menu = S.menu === Number(el.dataset.g) ? null : Number(el.dataset.g); break;
@@ -699,10 +698,10 @@ ALTER TABLE t_paper_read_extension
       case "selAllPaged": S.selAll = !S.selAll; S.sel = {}; break;
       case "breview": apply(selectedIds().map(find), "reviewed", "已标记 {n} 份为已审核"); exitBatch(); break;
       case "bpending": apply(selectedIds().map(find), "pending", "{n} 份已设为待审核"); exitBatch(); break;
-      case "bset": var v = Number(el.dataset.v), n = 0; selectedIds().map(find).forEach(function(x){ var before = x.score; setScore(x, v); if (x.score !== before) n++; }); exitBatch(); toast("已修改 " + n + " 份分数，均记为已修正", false); break;
+      case "bset": var v = Number(el.dataset.v), n = 0; selectedIds().map(find).forEach(function(x){ var before = x.score; setScore(x, v); if (x.score !== before) n++; }); exitBatch(); toast("已修改 " + n + " 份分数，均记为已审核（已修正）"); break;
       case "pageConfirm": pageConfirm(); return;
+      case "cancelPage": apply(pageItems().filter(function(x){ return x.st === "reviewed"; }), "pending", "已取消本页 {n} 份审核结果"); break;
       case "refresh": break;
-      case "undo": if (S.undo) { S.undo.forEach(function(x){ x[0].st = x[1]; }); S.undo = null; $("toast").hidden = true; } break;
       case "dclose": closeDetail(); return;
       case "dprev": navDetail(-1); return;
       case "dnext": navDetail(1); return;
@@ -722,15 +721,15 @@ ALTER TABLE t_paper_read_extension
       '<tr><th>题号</th><th>批改进度</th><th class="isnew">审核进度</th><th class="isnew">AI 判分一致率</th></tr>' +
       [13,14,15].map(function(q){
         var st = stats(Q[q]), done = st.reviewed + st.corrected;
-        return '<tr><td>' + q + '</td><td>批改完成 ' + st.total + '/' + st.total + '</td><td>' + (S.on[q] ? (st.left ? done + '/' + st.total + '，待审 <b style="color:var(--warn)">' + st.pending + '</b>' + (st.doubt ? '，存疑 <b style="color:#409eff">' + st.doubt + '</b>' : '') : '<span style="color:var(--ok)">✓ 已审完</span>') : '<span style="color:var(--muted)">不审核</span>') + '</td>' +
+        return '<tr><td>' + q + '</td><td>批改完成 ' + st.total + '/' + st.total + '</td><td>' + (on() ? (st.left ? done + '/' + st.total + '，待审 <b style="color:var(--warn)">' + st.pending + '</b>' + (st.doubt ? '，存疑 <b style="color:#409eff">' + st.doubt + '</b>' : '') : '<span style="color:var(--ok)">✓ 已审完</span>') : '<span style="color:var(--muted)">未开启审核模式</span>') + '</td>' +
           '<td>' + (done ? Math.round(st.reviewed / done * 100) + '%（已审 ' + done + '，改分 ' + st.corrected + '）' : '<span style="color:var(--muted)">—</span>') + '</td></tr>';
       }).join('') + '</table></div><p style="color:var(--muted);font-size:12px;margin:12px 0 0">AI 判分一致率 = 老师审核后未改分的份数 ÷ 已审核份数。</p></div></div>';
     $("mask").hidden = false;
   }
   function closeModal(){ S.modal = null; $("mask").hidden = true; }
   $("reviewSw").addEventListener("click", function(){
-    S.on[S.qn] = !S.on[S.qn]; S.view = null; S.filter = on() ? "pending" : "all"; S.page = 1; exitBatch();
-    toast("第 " + S.qn + " 题已" + (on() ? "开启" : "关闭") + "审核模式", false); render();
+    S.reviewOn = !S.reviewOn; S.view = null; S.filter = on() ? "pending" : "all"; S.page = 1; exitBatch();
+    toast("已" + (on() ? "开启" : "关闭") + "审核模式（作用于全部题，不保存，刷新页面恢复关闭）"); render();
   });
   document.addEventListener("change", function(e){
     if (e.target.id === "psize") { PAGE = Number(e.target.value); S.page = 1; S.view = null; render(); }

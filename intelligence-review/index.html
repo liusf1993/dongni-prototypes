@@ -277,7 +277,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li>不新增“批量审核”模式：审核模式下，现有“批量打分”的底部条增加“标记已审核 / 设为待审核”。</li>
       <li>排序全部由服务端完成，前端不再排序：“已审核”视图按审核时间倒序（刚审的在最前），手快点错后能马上找到并撤回；待审核等其余视图仍按置信度低在前；卡片不显示低置信标签。</li>
       <li>“已修正”自动记为已审核：老师改分的同时把该卷子置为已审核；卡片上的“已修正 16→12”只是展示标签（当前分与 AI 原始分比较得出），不是独立状态。</li>
-      <li>不提供批量撤销：单张点“✓ 已审”撤回；整页点底部“取消当前页审核结果”（原“本页已审完”提示改为该按钮），本页已审核的卷子退回待审核，分数不回滚。</li>
+      <li>不提供批量撤销：单张点“✓ 已审”撤回；整页点底部“取消当前页审核结果”（原“本页已审完”提示改为该按钮），本页已审核的卷子退回待审核，分数不回滚；取消后重新取当前视图，例如在“已审核”视图里，取消的卷子离开，页面补上剩余已审核的。</li>
       <li>审核模式下单张改分不刷新列表、不再弹“保存成功”；确认时分数已变化的卷子静默跳过。</li>
       <li>题号右侧在审核完成后显示绿色小圆点（未审完不显示），分题审核进度和 AI 判分一致率放进“进度总览”。</li>
       <li>单份可标“疑”（存疑）：暂不确定先跳过，离开待审核列表，进“存疑”筛选，后面再审；存疑未清完不算审完（题号不亮绿点）。</li>
@@ -331,7 +331,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <tr><td>满分组/一致答案组</td><td>左侧分组 ⋮ → 确认本组待审核（菜单内二次确认）</td><td>3 次</td></tr>
       <tr><td>可疑件细看</td><td>点图片打开现有“学生作答详情”，右侧新增审核区：“通过并下一份”跳到下一份待审，← → 翻看（现有），改分即修正</td><td>每份 1 次</td></tr>
       <tr><td>拿不准，先跳过</td><td>悬停卡片点“疑”，或详情里“标记存疑，下一份”；之后在“存疑”筛选里集中处理（可请同事一起看）</td><td>1 次</td></tr>
-      <tr><td>整页重审</td><td>底部“取消当前页审核结果”：本页已审核的卷子退回待审核（分数不回滚），可重新审</td><td>1 次</td></tr>
+      <tr><td>整页重审</td><td>底部“取消当前页审核结果”：本页已审核的卷子退回待审核（分数不回滚），随后刷新当前视图（已审核视图里显示剩余已审核的），可重新审</td><td>1 次</td></tr>
       <tr><td>批量打分</td><td>沿用现有批量打分；被改分的卷子自动记为已审核（带“已修正”标签）</td><td>不变</td></tr>
       <tr><td>接着昨天继续</td><td>开关刷新后恢复关闭，需重新打开审核模式；打开即是待审核视图，审完的题号右侧有绿点，“进度总览”看每题剩余</td><td>0</td></tr>
     </table></div>
@@ -670,7 +670,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     inp.addEventListener("change", function(){ setScore(s, Number(inp.value)); render(); });
   }
 
-  var RESET_VIEW = {qn:1, filter:1, group:1, page:1, refresh:1}, CLEAR_AFTER = {groupConfirm:1, breview:1, bpending:1, bset:1};
+  var RESET_VIEW = {qn:1, filter:1, group:1, page:1, refresh:1}, CLEAR_AFTER = {cancelPage:1, groupConfirm:1, breview:1, bpending:1, bset:1};
   document.addEventListener("click", function(e){
     var el = e.target.closest("[data-act]");
     if (S.menu !== null && !e.target.closest("[data-stop]") && !(el && el.dataset.act === "menu")) { S.menu = null; S.menuConfirm = false; if (!el) { render(); return; } }

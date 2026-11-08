@@ -523,7 +523,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     $("rv").hidden = $("rg").hidden = !on();
     $("sortHint").hidden = !on() || S.filter !== "done";
     if (on()) {
-      $("rv").innerHTML = '审核 <span class="bar"><i class="r" style="width:' + (st.reviewed/st.total*100) + '%"></i><i class="c" style="width:' + (st.corrected/st.total*100) + '%"></i></span><b>' + (st.reviewed+st.corrected) + '</b>/' + st.total + (st.reviewed + st.corrected ? '<span style="color:var(--muted)">· AI 判分一致率 ' + Math.round(st.reviewed / (st.reviewed + st.corrected) * 100) + '%</span>' : '');
+      $("rv").innerHTML = '审核 <span class="bar"><i class="r" style="width:' + ((st.reviewed+st.corrected)/st.total*100) + '%"></i></span><b>' + (st.reviewed+st.corrected) + '</b>/' + st.total + (st.reviewed + st.corrected ? '<span style="color:var(--muted)">· AI 判分一致率 ' + Math.round(st.reviewed / (st.reviewed + st.corrected) * 100) + '%</span>' : '');
       $("rg").innerHTML = [["pending","待审核 " + st.pending],["doubt","存疑 " + st.doubt],["done","已审核 " + (st.reviewed+st.corrected)],["all","全部"]].map(function(x){
         return '<button data-act="filter" data-f="' + x[0] + '" aria-pressed="' + (S.filter === x[0]) + '">' + x[1] + '</button>';
       }).join("");

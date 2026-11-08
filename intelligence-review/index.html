@@ -271,19 +271,22 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   <h2>智能批改审核：基本设计</h2>
   <p class="muted">原型数据为模拟数据，学生姓名随机生成：第 13 题（配平题，4 小问各 4 分，满分 16），72 名学生，其中少量 AI 判分有误。每页 12 份，便于演示翻页（线上默认每页 100 份）。</p>
   <div>
-    <h3>本轮决策（2026-11-03，11-05 更新）</h3>
+    <h3>本轮决策（2026-11-03，11-08 更新）</h3>
     <ul>
       <li>审核开关放在页头“设置智能批改”按钮旁边（不放进设置向导里），作用于全部题。考试和作业默认都是关，只在前端有效，不做任何状态记录（不入库、不记住，刷新页面恢复关闭）。</li>
       <li>不新增“批量审核”模式：审核模式下，现有“批量打分”的底部条增加“标记已审核 / 设为待审核”。</li>
       <li>排序全部由服务端完成，前端不再排序：“已审核”视图按审核时间倒序（刚审的在最前），手快点错后能马上找到并撤回；待审核等其余视图仍按置信度低在前；卡片不显示低置信标签。</li>
       <li>“已修正”自动记为已审核：老师改分的同时把该卷子置为已审核；卡片上的“已修正 16→12”只是展示标签（当前分与 AI 原始分比较得出），不是独立状态。</li>
-      <li>不提供批量撤销：单张点“✓ 已审”撤回；整页点底部“取消当前页审核结果”（原“本页已审完”提示改为该按钮），本页已审核的卷子退回待审核，分数不回滚；取消后重新取当前视图，例如在“已审核”视图里，取消的卷子离开，页面补上剩余已审核的。</li>
+      <li>撤回方式：单张点“✓”撤回；整页点底部“取消当前页审核结果”（原“本页已审完”提示改为该按钮），本页<b>本人审核</b>的已审核卷子退回待审核，分数不回滚，他人审核的跳过并提示；取消后重新取当前视图，例如在“已审核”视图里，取消的卷子离开，页面补上剩余已审核的。</li>
+      <li>撤销上次审核（11-08 补充）：确认、标记、整组确认之后，底部审核条出现“撤销上次审核”，只保留 8 秒，切换筛选或开关即失效。只恢复上次实际写入、且之后没被别人再次操作（状态、分数、审核人都没变）的卷子，其余提示“N 份状态已变化未撤销”。原因：整组确认可能一次放行几百份，只靠按审核时间倒序加按页取消，点错后恢复成本太高。</li>
       <li>审核模式下单张改分不刷新列表、不再弹“保存成功”；确认时分数已变化的卷子静默跳过。</li>
       <li>题号右侧在审核完成后显示绿色小圆点（未审完不显示），分题审核进度和 AI 判分一致率放进“进度总览”。</li>
       <li>单份可标“疑”（存疑）：暂不确定先跳过，离开待审核列表，进“存疑”筛选，后面再审；存疑未清完不算审完（题号不亮绿点）。</li>
       <li>分页可选 20 / 40 / 80 / 100 条每页。</li>
       <li>卡片身份：作业显示学生姓名；考试显示 exam_item_id（小号等宽字体），与现有详情标题口径一致。</li>
       <li>不使用 Enter 等快捷键确认，避免在输入分数时误触整页确认；所有审核动作都通过按钮完成。</li>
+      <li>审核范围（11-08 补充）：只覆盖已开启的大模型批改、非作文题；旧 OCR 流程即使历史配置为开启也不显示审核入口，服务端写接口同样拒绝。考试与作业接口不能混用，作业只能操作当前老师可见班级内的卷子，考试需有该题负责人/创建人/顾问权限。</li>
+      <li>OCR 识别结果分组也支持“确认本组待审核”（原计划 P2，已随 P1 实现），确认前弹窗二次确认。</li>
       <li>暂不做：确认已看过的、悬停看评分理由、详情弹窗快捷键、抽检；作文题放到下一期。</li>
     </ul>
   </div>
@@ -348,7 +351,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <tr><td>吸顶工具条左侧</td><td>批改完成 ⌄、剩余人工批改数、刷新</td><td>审核进度条 + 待审核/存疑/已审核/全部 筛选 + 已审核视图下的“按审核时间倒序”提示</td><td>新组件 <code>review-progress</code>；筛选值作为 <code>getListResultDetail</code> 的 <code>reviewStatus</code> 参数；审核模式下已审核视图按审核时间倒序，其余视图按置信度低在前</td></tr>
       <tr><td>吸顶工具条右侧</td><td>查看答案、批量设为人工、批量打分</td><td>不变（不新增“批量审核”）</td><td>—</td></tr>
       <tr><td>左侧分组树 <code>group-tree</code></td><td>分数/识别结果分组、N份、⋮（将分数调整为、设为人工阅卷）</td><td>不显示进度；本组审核完成（无待审核、无存疑）后分数右侧显示绿色小圆点；⋮ 增加“确认本组待审核”（菜单内确认）</td><td><code>listAiResult</code> 分组返回是否审完及 <code>pendingCount</code>（整组确认用）；<code>handleBatchAction</code> 增加 <code>reviewGroup</code> 命令</td></tr>
-      <tr><td>卡片 <code>box-item-v2</code></td><td>作答图（点击看详情）、作业显示姓名（考试不显示）、待人工标签、分数步进器</td><td>悬停“疑”“✓ 确认”；标签区“✓ 已审 / 疑 / 已修正 16→12（已自动记为已审核）/ 已移至 N 分组”；考试显示 exam_item_id（11px 等宽字体）</td><td>新组件 <code>review-status-tag</code>；身份显示沿用 <code>scenarioMode</code>，考试取 <code>examResultItemId</code>；<code>adjustScore</code>/<code>inputChange</code> 保存成功后只更新本卡片</td></tr>
+      <tr><td>卡片 <code>box-item-v2</code></td><td>作答图（点击看详情）、作业显示姓名（考试不显示）、待人工标签、分数步进器</td><td>悬停“疑”“✓ 确认”；标签区“✓（已审）/ 疑 / 16→12（已修正，悬停提示已自动记为已审核）/ 已移至 N 分组”；考试显示 exam_item_id（11px 等宽字体）</td><td>新组件 <code>review-status-tag</code>；身份显示沿用 <code>scenarioMode</code>，考试取 <code>examResultItemId</code>；<code>adjustScore</code>/<code>inputChange</code> 保存成功后只更新本卡片</td></tr>
       <tr><td>底部 <code>batch-score-bar</code></td><td>批量模式下的当前页/全部勾选与批量动作</td><td>非批量模式：审核条（确认本页其余 N 份；本页没有待审时，原“本页已审完”改为“取消当前页审核结果”按钮）；批量打分模式：增加“设为待审核 / 标记已审核”</td><td>新组件 <code>review-dock</code>；<code>batch-score-bar</code> 在 <code>batchType = 1</code> 且审核模式时多两个按钮</td></tr>
       <tr><td>学生作答详情 <code>dn-modal</code>（80vw）</td><td>左：作答图+识别结果；右：得分修改、评分理由；外侧左右箭头</td><td>右侧新增审核区：状态、“通过并下一份”按钮</td><td>扩展现有弹窗；本期不加快捷键</td></tr>
       <tr><td>分页 <code>dn-el-pagination</code></td><td>每页默认 100 条</td><td>每页条数可选 20 / 40 / 80 / 100</td><td>传入 <code>page-sizes</code>；切换后清空本页快照</td></tr>
@@ -364,7 +367,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li><b>本页快照</b>：进入一页时记下这页卷子的 ID 和当时显示的分数。审核模式下改分只更新这张卡片（显示“已修正 16→12 · 已移至 12 分组”）和左侧、题号的计数，<b>不重新拉列表</b>。翻页、切换分组/筛选、确认本页、点“刷新”时才重新获取。</li>
       <li><b>确认按快照提交</b>：“确认本页”提交快照中的 <code>examItemId + seenScore</code>，不提交当前列表。服务端只确认仍为待审核、且分数没变的行；别的老师刚改过或 AI 重批过的会被跳过，前端提示“已确认 10 份，2 份分数已变化未确认”，并保留在待审核中。</li>
       <li><b>翻页不漏看</b>：审核默认用“待审核”筛选。确认过的卷子离开结果集，确认后总是重新取第 1 页，就是下一批，不依赖页码偏移。“全部/已审核/存疑”视图下确认本页后留在当前页刷新，不自动翻页。</li>
-      <li><b>详情弹窗</b>：上一份/下一份基于打开弹窗时的快照列表，弹窗打开期间不因改分重排。</li>
+      <li><b>详情弹窗</b>：上一份/下一份基于打开弹窗时的快照列表，弹窗打开期间不因改分重排。“通过并下一份”先在当前页找下一份待审；当前页没有时，按当前题可见范围向服务端取下一份待审（不改变列表筛选和分组）；服务端因分数已变化跳过当前卷子时，不当成成功、不跳转。</li>
       <li><b>影响面</b>：只在审核模式开启时改变刷新时机；关闭时保持现有 <code>setSubmitItems</code> 刷新逻辑。批量打分、整组改分、设为人工本来就作用于整组，仍按现有逻辑刷新，同时清空快照。</li>
     </ol>
     <p class="muted">原型已按此实现：在 16 分组里改分，卡片留在原位并提示已移组；左侧计数立即变化；点“确认本页”只确认这页剩下的；点工具条“刷新”才重新取这一页。</p>
@@ -396,6 +399,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       <li><code>POST …/review</code> <code>{paperReadId, items: [{examItemId, seenScore}], reviewStatus: 0|1|2}</code>：按卷子设置。确认（1）时只更新属于该 paperRead、review_status 为 0 或 2、且当前 finallyScore 等于 seenScore 的行；其余静默跳过（前端不做特殊提示，跳过的仍是待审核）。撤回（0，含“取消当前页审核结果”）和存疑（2）不比较分数；“确认本页”只提交待审核的卷子，不含存疑。幂等。</li>
       <li><code>POST …/reviewGroup</code> <code>{paperReadId, readScore | ocrText, expectedCount}</code>：整组确认。服务端统计该组待审数（不含存疑），与 expectedCount 不一致则拒绝并返回最新数量（防止期间新批改出来的卷子被一并放行）。</li>
       <li><code>listAiDetail</code>（<code>pageAiItemByFilter</code>）增加 <code>reviewStatus</code> 筛选参数（待审核 / 存疑 / 已审核含已修正）；开关不入库、后端不感知，前端在审核模式下传排序参数：<code>reviewStatus = 已审核</code> 时按 <code>teii.review_date_time desc, teii.exam_item_id desc</code>，其余按 <code>teii.confidence, teii.exam_item_id</code>（现为 <code>order by teii.exam_item_id</code>；不传参数时保持现状），前端不再排序；返回 <code>reviewStatus / reviewerName / reviewDateTime / aiScore</code>；<code>listAiResult</code> 分组结果增加 <code>pendingCount</code>；题号列表接口增加每题待审数。</li>
+      <li><b>撤销</b>：<code>review</code> 接口 <code>undo: true</code> 时按 <code>{examItemId, seenScore, expectedReviewStatus}</code> 逐行校验：当前状态、当前分数、审核人（必须是本人）都与上次写入一致才恢复，目标状态已达成按幂等成功；撤销不支持“全部分页数据”。取消当前页审核结果同样走此逻辑，因此只退回本人审核的卷子。确认类写入逐行带“原状态 + AI 分 + 当前分”条件，防止覆盖 SELECT 之后别人的新操作。</li>
       <li>老师改分沿用现有 <code>submitItems</code>，在同一事务里把被改分的行置为 <code>review_status = 1</code>（审核人取当前登录用户），不依赖前端开关，因此关闭审核模式期间的改分也算已审；“已修正”标签靠分数比较推导。注意现有逻辑改分时会清空 <code>llm_comment</code>，改过分的卷子在详情里看不到 AI 评分理由。AI 重新批改且分数变化时，把 review_status 重置为 0。</li>
     </ul>
     <p><b>多人协作</b>：状态挂在卷子上而不是老师上，谁确认都算；卡片悬停显示审核人和时间。并发确认同一批是幂等的。</p>
@@ -414,8 +418,8 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   <div>
     <h3>9. 分期</h3>
     <ol>
-      <li><b>P1</b>：页头审核开关（仅前端）+ 审核状态 + 单张/批量/本页/整组确认 + 取消当前页审核结果 + 改分自动已审核（带已修正标签）+ 待审筛选 + 服务端排序（已审核按审核时间倒序，其余置信度低在前）+ 本页快照与改分不刷新 + 进度条与进度总览（含 AI 判分一致率）。</li>
-      <li><b>P2</b>：作文题审核（单独设计）；详情弹窗快捷键；悬停看评分理由；OCR 一致答案组整组确认。</li>
+      <li><b>P1</b>：页头审核开关（仅前端）+ 审核状态 + 单张/批量/本页/整组确认 + 取消当前页审核结果 + 改分自动已审核（带已修正标签）+ 待审筛选 + 服务端排序（已审核按审核时间倒序，其余置信度低在前）+ 本页快照与改分不刷新 + 进度条与进度总览（含 AI 判分一致率）+ 撤销上次审核（8 秒）+ OCR 分组整组确认。</li>
+      <li><b>P2</b>：作文题审核（单独设计）；详情弹窗快捷键；悬停看评分理由。</li>
       <li><b>P3</b>：抽检模式；按小问结构化判分；根据审核数据调整排序。</li>
     </ol>
   </div>
@@ -500,8 +504,9 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   function reviewTag(s){
     if (!on()) return '';
     var moved = S.group !== "all" && s.group !== S.group ? '<span class="tag isnew" style="background:#f4f4f5;color:var(--muted)" title="已移出本组，刷新或翻页后不再显示">已移至 ' + s.group + ' 分组</span>' : '';
-    var cor = s.score !== s.ai ? '<span class="tag cor isnew" title="老师改过分数，已自动记为已审核">已修正 ' + s.ai + '→' + s.score + '</span>' : '';
-    if (s.st === "reviewed") return (cor || '<button class="tag rev isnew" data-act="unreview" data-id="' + s.id + '" title="张老师 · 刚刚审核；点击撤回为待审">✓ 已审</button>') + moved;
+    // 标签只显示分值变化（AI 分→当前分），含义放在悬停提示里；普通已审核只显示对勾
+    var cor = s.score !== s.ai ? '<span class="tag cor isnew" title="已修正：老师改过分数，已自动记为已审核">' + s.ai + '→' + s.score + '</span>' : '';
+    if (s.st === "reviewed") return (cor || '<button class="tag rev isnew" data-act="unreview" data-id="' + s.id + '" title="张老师 · 刚刚审核；点击撤回为待审">✓</button>') + moved;
     if (s.st === "doubt") return '<button class="tag doubt isnew" data-act="unreview" data-id="' + s.id + '" title="暂不确定，先跳过；点击取消存疑">疑</button>' + moved;
     return cor + moved;
   }
@@ -602,14 +607,33 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     b.className = "bbar isnew";
     b.hidden = false;
     b.innerHTML = '<div class="l"><span>当前页 <b>' + list.length + '</b> 份：待审 <b>' + ps.pending + '</b> · 已审 ' + ps.reviewed + ' · 已修正 ' + ps.corrected + (ps.doubt ? ' · 存疑 ' + ps.doubt : '') + '</span><span style="color:var(--muted)">判错的直接改分；拿不准的标“疑”先跳过</span></div>' +
-      '<div class="rr">' + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '</button>' : '<button class="ebtn" data-act="cancelPage"' + (ps.reviewed + ps.corrected ? '' : ' disabled') + ' title="把本页已审核的卷子退回待审核，分数不回滚">取消当前页审核结果</button>') + '</div>';
+      '<div class="rr">' + (UNDO ? '<button class="ebtn" data-act="undo" title="8 秒内可撤销上一次确认、标记或撤回；之后被改动的卷子不会被覆盖">撤销上次审核</button>' : '') + (ps.pending ? '<button class="ebtn primary" data-act="pageConfirm">确认本页' + (ps.reviewed || ps.corrected || ps.doubt ? '其余 ' : ' ') + ps.pending + ' 份无误' + (S.filter === "pending" ? '，看下一批' : '') + '</button>' : '<button class="ebtn" data-act="cancelPage"' + (ps.reviewed + ps.corrected ? '' : ' disabled') + ' title="把本页已审核的卷子退回待审核，分数不回滚">取消当前页审核结果</button>') + '</div>';
   }
   function selectedIds(){ return S.selAll ? filtered().map(function(s){ return s.id; }) : Object.keys(S.sel).map(Number); }
 
-  function apply(list, st, msg){
+  // 撤销上次审核：只保留 8 秒，只恢复本次实际改动且之后没被再次改动（状态、分数都没变）的卷子
+  var UNDO = null, ut = null;
+  function startUndo(prev, to){
+    UNDO = {items: prev, to: to}; clearTimeout(ut);
+    ut = setTimeout(function(){ UNDO = null; render(); }, 8000);
+  }
+  function clearUndo(){ UNDO = null; clearTimeout(ut); }
+  function undoLast(){
+    if (!UNDO) return;
+    var n = 0, skipped = 0;
+    UNDO.items.forEach(function(p){
+      var x = find(p.id);
+      if (x.st === UNDO.to && x.score === p.score) { x.st = p.st; x.rt = p.rt; n++; } else skipped++;
+    });
+    clearUndo();
+    toast(skipped ? "已撤销 " + n + " 份，" + skipped + " 份状态已变化未撤销" : "已撤销上次审核");
+  }
+  function apply(list, st, msg, noUndo){
     var ch = list.filter(function(s){ return s.st !== st; });
     if (!ch.length) return;
+    var prev = ch.map(function(x){ return {id: x.id, st: x.st, rt: x.rt, score: x.score}; });
     ch.forEach(function(x){ x.st = st; if (st === "reviewed") x.rt = ++CLOCK; });
+    if (!noUndo) startUndo(prev, st);
     toast(msg.replace("{n}", ch.length));
   }
   var tt = null;
@@ -681,7 +705,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
     if (RESET_VIEW[a]) S.view = null;
     switch (a) {
       case "qn": S.qn = Number(el.dataset.q); S.group = "all"; S.page = 1; exitBatch(); S.filter = on() ? "pending" : "all"; break;
-      case "filter": S.filter = el.dataset.f; S.page = 1; S.sel = {}; S.selAll = false; break;
+      case "filter": clearUndo(); S.filter = el.dataset.f; S.page = 1; S.sel = {}; S.selAll = false; break;
       case "group": S.group = el.dataset.g === "all" ? "all" : Number(el.dataset.g); S.page = 1; S.sel = {}; S.selAll = false; break;
       case "menu": e.stopPropagation(); S.menuConfirm = false; S.menu = S.menu === Number(el.dataset.g) ? null : Number(el.dataset.g); break;
       case "groupAsk": S.menuConfirm = true; break;
@@ -704,7 +728,8 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
       case "bpending": apply(selectedIds().map(find), "pending", "{n} 份已设为待审核"); exitBatch(); break;
       case "bset": var v = Number(el.dataset.v), n = 0; selectedIds().map(find).forEach(function(x){ var before = x.score; setScore(x, v); if (x.score !== before) n++; }); exitBatch(); toast("已修改 " + n + " 份分数，均记为已审核（已修正）"); break;
       case "pageConfirm": pageConfirm(); return;
-      case "cancelPage": apply(pageItems().filter(function(x){ return x.st === "reviewed"; }), "pending", "已取消本页 {n} 份审核结果"); break;
+      case "cancelPage": clearUndo(); apply(pageItems().filter(function(x){ return x.st === "reviewed"; }), "pending", "已取消本页 {n} 份审核结果", true); break;
+      case "undo": undoLast(); break;
       case "refresh": break;
       case "dclose": closeDetail(); return;
       case "dprev": navDetail(-1); return;
@@ -732,7 +757,7 @@ pre{background:#f5f7fa;border-radius:8px;padding:12px;overflow-x:auto;font-size:
   }
   function closeModal(){ S.modal = null; $("mask").hidden = true; }
   $("reviewSw").addEventListener("click", function(){
-    S.reviewOn = !S.reviewOn; S.view = null; S.filter = on() ? "pending" : "all"; S.page = 1; exitBatch();
+    clearUndo(); S.reviewOn = !S.reviewOn; S.view = null; S.filter = on() ? "pending" : "all"; S.page = 1; exitBatch();
     toast("已" + (on() ? "开启" : "关闭") + "审核模式（作用于全部题，不保存，刷新页面恢复关闭）"); render();
   });
   document.addEventListener("change", function(e){

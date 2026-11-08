@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#faf9f6"><title>顺手帮 · 晒账单</title><link rel="stylesheet" href="style.css"></head>
+<body>
+<div class="phone-app">
+  <header class="topbar"><a href="#discover" class="brand"><span data-icon="spark"></span>顺手帮</a><span class="demo-label">移动端体验版</span><button class="header-post" data-action="publish" aria-label="晒一张账单"><i data-icon="plus"></i></button></header>
+  <main id="main"></main>
+  <footer>示例账单 · 帮付为模拟体验</footer>
+  <nav class="mobile-nav" aria-label="手机导航">
+    <button data-route="discover"><i data-icon="compass"></i><span>逛账单</span></button>
+    <button data-route="saved"><i data-icon="bookmark"></i><span>收藏</span><b id="savedCount" hidden>0</b></button>
+    <button data-action="publish" class="mobile-add"><i data-icon="plus"></i><span>晒账单</span></button>
+    <button data-route="activity"><i data-icon="heart"></i><span>帮付</span></button>
+    <button data-route="profile"><i data-icon="user"></i><span>我的</span></button>
+  </nav>
+</div>
+<dialog id="dialog"><div class="modal"><button class="close-button" aria-label="关闭弹窗" id="closeDialog"><i data-icon="close"></i></button><div id="dialogBody"></div></div></dialog>
+<div class="toast" role="status" id="toast"></div><script src="app.js"></script>
+</body></html>

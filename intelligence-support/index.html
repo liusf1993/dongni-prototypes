@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#008c90">
+  <meta name="description" content="懂你智能批改短期原型：查看学校规则、反馈具体案例、跟踪处理进展。全部内容为虚构演示。">
+  <title>智能批改 · 问题反馈闭环原型</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23008c90'/%3E%3Cpath d='M9 8h14v16H9zM12 13h8M12 17h8M12 21h5' stroke='white' fill='none' stroke-width='2'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <!-- 短期反馈原型：状态只在内存保留，不提交真实问题或评分。 -->
+  <a class="skip-link" href="#main">跳到批改工作区</a>
+  <div id="app"></div>
+  <dialog id="workspace-dialog" aria-labelledby="dialog-title"></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

@@ -29,3 +29,4 @@ dialog{border:0;border-radius:14px;padding:0;max-width:1050px;width:calc(100% - 
 
 /* 说明页与图例使用满足正文对比度的前景色。 */
 :root{--teal:#00797d;--muted:#5e6f72}
+.new-region .new-outline:focus-visible{outline:3px solid #52a9ac;outline-offset:3px}
